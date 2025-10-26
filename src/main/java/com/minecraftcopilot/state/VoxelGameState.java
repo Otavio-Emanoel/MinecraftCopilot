@@ -13,6 +13,7 @@ import com.minecraftcopilot.world.ChunkManager;
 import com.minecraftcopilot.player.PlayerController;
 import com.minecraftcopilot.gfx.TextureAtlas;
 import com.minecraftcopilot.ui.HotbarState;
+import com.minecraftcopilot.state.BlockInteractionState;
 import com.minecraftcopilot.Chunk;
 
 public class VoxelGameState extends BaseAppState {
@@ -25,6 +26,7 @@ public class VoxelGameState extends BaseAppState {
     private BitmapFont font;
     private PlayerController player;
     private HotbarState hotbar;
+    private BlockInteractionState blockInteraction;
 
     @Override
     protected void initialize(Application application) {
@@ -71,6 +73,10 @@ public class VoxelGameState extends BaseAppState {
     hotbar = new HotbarState(chunkMaterial);
     getStateManager().attach(hotbar);
 
+    // Interação com blocos: contorno + destruir com clique esquerdo
+    blockInteraction = new BlockInteractionState(worldNode, chunkManager);
+    getStateManager().attach(blockInteraction);
+
         // Mira (crosshair) central
         this.font = app.getAssetManager().loadFont("Interface/Fonts/Default.fnt");
         this.crosshair = new BitmapText(font);
@@ -97,6 +103,10 @@ public class VoxelGameState extends BaseAppState {
         if (hotbar != null) {
             getStateManager().detach(hotbar);
             hotbar = null;
+        }
+        if (blockInteraction != null) {
+            getStateManager().detach(blockInteraction);
+            blockInteraction = null;
         }
         if (app != null && app.getInputManager() != null) {
             app.getInputManager().setCursorVisible(true);

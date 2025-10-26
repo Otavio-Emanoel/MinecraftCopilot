@@ -4,7 +4,10 @@ import com.jme3.material.Material;
 import com.jme3.math.Vector3f;
 import com.jme3.scene.Geometry;
 import com.jme3.scene.Node;
+import com.jme3.scene.Spatial;
+import com.jme3.renderer.queue.RenderQueue;
 import com.minecraftcopilot.Chunk;
+import com.minecraftcopilot.BlockType;
 
 import java.util.*;
 
@@ -17,7 +20,13 @@ public class ChunkManager {
     private final int seed;
     private final int viewRadius; // em chunks
 
-    private final Map<ChunkCoord, Geometry> loaded = new HashMap<>();
+    private static class LoadedChunk {
+        final Chunk chunk;
+        Geometry geom;
+        LoadedChunk(Chunk c, Geometry g) { this.chunk = c; this.geom = g; }
+    }
+
+    private final Map<ChunkCoord, LoadedChunk> loaded = new HashMap<>();
 
     public ChunkManager(Node worldNode, Material chunkMaterial, int seed, int viewRadius) {
         this.worldNode = worldNode;
@@ -28,6 +37,10 @@ public class ChunkManager {
 
     private static int worldToChunk(float world) {
         return (int) Math.floor(world / Chunk.SIZE);
+    }
+
+    private static int worldToChunk(int world) {
+        return Math.floorDiv(world, Chunk.SIZE);
     }
 
     private static Set<ChunkCoord> computeNeededAround(int ccx, int ccz, int radius) {
@@ -51,11 +64,11 @@ public class ChunkManager {
         // Descarregar os que estão fora de alcance (com uma margem)
         int unloadRadius = viewRadius + 1;
         Set<ChunkCoord> keep = computeNeededAround(ccx, ccz, unloadRadius);
-        Iterator<Map.Entry<ChunkCoord, Geometry>> it = loaded.entrySet().iterator();
+        Iterator<Map.Entry<ChunkCoord, LoadedChunk>> it = loaded.entrySet().iterator();
         while (it.hasNext()) {
-            Map.Entry<ChunkCoord, Geometry> e = it.next();
+            Map.Entry<ChunkCoord, LoadedChunk> e = it.next();
             if (!keep.contains(e.getKey())) {
-                e.getValue().removeFromParent();
+                e.getValue().geom.removeFromParent();
                 it.remove();
             }
         }
@@ -77,14 +90,34 @@ public class ChunkManager {
         chunk.generateFlat(18);
         Geometry geom = chunk.buildGeometry(chunkMaterial);
         worldNode.attachChild(geom);
-        loaded.put(c, geom);
+        loaded.put(c, new LoadedChunk(chunk, geom));
 
     }
 
     public void clearAll() {
-        for (Geometry g : loaded.values()) {
-            g.removeFromParent();
+        for (LoadedChunk lc : loaded.values()) {
+            lc.geom.removeFromParent();
         }
         loaded.clear();
+    }
+
+    public boolean setBlockAtWorld(int wx, int wy, int wz, BlockType type) {
+        int cx = worldToChunk(wx);
+        int cz = worldToChunk(wz);
+        ChunkCoord key = new ChunkCoord(cx, cz);
+        LoadedChunk lc = loaded.get(key);
+        if (lc == null) return false;
+        int lx = wx - cx * Chunk.SIZE;
+        int lz = wz - cz * Chunk.SIZE;
+        if (wy < 0 || wy >= Chunk.HEIGHT || lx < 0 || lx >= Chunk.SIZE || lz < 0 || lz >= Chunk.SIZE) return false;
+        lc.chunk.set(lx, wy, lz, type);
+        // Reconstroi apenas este chunk
+    Geometry newGeom = lc.chunk.buildGeometry(chunkMaterial);
+    // Preserva a ordem/bucket
+    newGeom.setQueueBucket(RenderQueue.Bucket.Opaque);
+        lc.geom.removeFromParent();
+        worldNode.attachChild(newGeom);
+        lc.geom = newGeom;
+        return true;
     }
 }
