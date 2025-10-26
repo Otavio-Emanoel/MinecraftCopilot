@@ -97,8 +97,13 @@ public class MainMenuState extends BaseAppState {
     @Override
     protected void onEnable() {
         // Nada extra
-        if (app != null && app.getFlyByCamera() != null) {
-            app.getFlyByCamera().setEnabled(false);
+        if (app != null) {
+            if (app.getFlyByCamera() != null) {
+                app.getFlyByCamera().setEnabled(false);
+            }
+            if (app.getInputManager() != null) {
+                app.getInputManager().setCursorVisible(true);
+            }
         }
     }
 

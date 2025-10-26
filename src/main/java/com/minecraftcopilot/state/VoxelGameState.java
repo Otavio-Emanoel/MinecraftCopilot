@@ -3,6 +3,8 @@ package com.minecraftcopilot.state;
 import com.jme3.app.Application;
 import com.jme3.app.SimpleApplication;
 import com.jme3.app.state.BaseAppState;
+import com.jme3.font.BitmapFont;
+import com.jme3.font.BitmapText;
 import com.jme3.material.Material;
 import com.jme3.math.ColorRGBA;
 import com.jme3.math.Vector3f;
@@ -15,6 +17,8 @@ public class VoxelGameState extends BaseAppState {
     private Node worldNode;
     private Material chunkMaterial;
     private ChunkManager chunkManager;
+    private BitmapText crosshair;
+    private BitmapFont font;
 
     @Override
     protected void initialize(Application application) {
@@ -24,23 +28,37 @@ public class VoxelGameState extends BaseAppState {
         // Cor do fundo "dia"
         app.getViewPort().setBackgroundColor(new ColorRGBA(0.6f, 0.8f, 1f, 1f));
 
-        // Habilitar câmera fly no jogo
+        // Habilitar câmera fly no jogo e capturar mouse
         if (app.getFlyByCamera() != null) {
             app.getFlyByCamera().setEnabled(true);
-            app.getFlyByCamera().setMoveSpeed(20f);
-            app.getFlyByCamera().setZoomSpeed(10f);
+            app.getFlyByCamera().setMoveSpeed(12f);
+            app.getFlyByCamera().setRotationSpeed(1.5f);
+            app.getFlyByCamera().setDragToRotate(false); // rotaciona sempre, sem precisar clicar
+            app.getFlyByCamera().setZoomSpeed(0f); // desabilita zoom por rolagem (estilo Minecraft)
+        }
+        if (app.getInputManager() != null) {
+            app.getInputManager().setCursorVisible(false); // esconde e "gruda" o mouse na janela
         }
 
         // Material com cores por vértice
         this.chunkMaterial = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
         this.chunkMaterial.setBoolean("VertexColor", true);
 
-        int seed = 1337;
+    int seed = 1337;
         this.chunkManager = new ChunkManager(worldNode, chunkMaterial, seed, 6);
         app.getRootNode().attachChild(worldNode);
 
         app.getCamera().setLocation(new Vector3f(16, 25, 48));
         app.getCamera().lookAt(new Vector3f(16, 15, 16), Vector3f.UNIT_Y);
+
+        // Mira (crosshair) central
+        this.font = app.getAssetManager().loadFont("Interface/Fonts/Default.fnt");
+        this.crosshair = new BitmapText(font);
+        crosshair.setText("+");
+        crosshair.setColor(ColorRGBA.White);
+        crosshair.setSize(font.getCharSet().getRenderedSize() * 1.2f);
+        app.getGuiNode().attachChild(crosshair);
+        centerCrosshair();
     }
 
     @Override
@@ -51,6 +69,13 @@ public class VoxelGameState extends BaseAppState {
         }
         if (chunkManager != null) {
             chunkManager.clearAll();
+        }
+        if (crosshair != null) {
+            crosshair.removeFromParent();
+            crosshair = null;
+        }
+        if (app != null && app.getInputManager() != null) {
+            app.getInputManager().setCursorVisible(true);
         }
     }
 
@@ -70,5 +95,14 @@ public class VoxelGameState extends BaseAppState {
             // Gera até 4 chunks por frame para evitar travamento
             chunkManager.update(app.getCamera().getLocation(), 4);
         }
+        centerCrosshair();
+    }
+
+    private void centerCrosshair() {
+        if (crosshair == null) return;
+        float w = app.getCamera().getWidth();
+        float h = app.getCamera().getHeight();
+        crosshair.setLocalTranslation((w - crosshair.getLineWidth()) / 2f,
+                (h + crosshair.getLineHeight()) / 2f, 0);
     }
 }
