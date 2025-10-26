@@ -64,6 +64,21 @@ public class Chunk {
         }
     }
 
+    public void generateFlat(int heightY) {
+        int h = Math.max(1, Math.min(HEIGHT - 1, heightY));
+        for (int x = 0; x < SIZE; x++) {
+            for (int z = 0; z < SIZE; z++) {
+                for (int y = 0; y <= h; y++) {
+                    BlockType type;
+                    if (y == h) type = BlockType.GRASS;
+                    else if (y >= h - 3) type = BlockType.DIRT;
+                    else type = BlockType.STONE;
+                    set(x, y, z, type);
+                }
+            }
+        }
+    }
+
     public Geometry buildGeometry(Material mat) {
         List<Float> positions = new ArrayList<>();
         List<Float> colors = new ArrayList<>();

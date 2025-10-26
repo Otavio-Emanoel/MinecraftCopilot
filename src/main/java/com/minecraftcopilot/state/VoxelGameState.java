@@ -6,18 +6,15 @@ import com.jme3.app.state.BaseAppState;
 import com.jme3.material.Material;
 import com.jme3.math.ColorRGBA;
 import com.jme3.math.Vector3f;
-import com.jme3.scene.Geometry;
 import com.jme3.scene.Node;
-import com.minecraftcopilot.Chunk;
+import com.minecraftcopilot.world.ChunkManager;
 
 public class VoxelGameState extends BaseAppState {
 
     private SimpleApplication app;
     private Node worldNode;
     private Material chunkMaterial;
-
-    private static final int WORLD_CHUNKS_X = 2;
-    private static final int WORLD_CHUNKS_Z = 2;
+    private ChunkManager chunkManager;
 
     @Override
     protected void initialize(Application application) {
@@ -39,15 +36,7 @@ public class VoxelGameState extends BaseAppState {
         this.chunkMaterial.setBoolean("VertexColor", true);
 
         int seed = 1337;
-        for (int cx = 0; cx < WORLD_CHUNKS_X; cx++) {
-            for (int cz = 0; cz < WORLD_CHUNKS_Z; cz++) {
-                Chunk chunk = new Chunk(cx, cz);
-                chunk.generateTerrain(seed);
-                Geometry geom = chunk.buildGeometry(chunkMaterial);
-                worldNode.attachChild(geom);
-            }
-        }
-
+        this.chunkManager = new ChunkManager(worldNode, chunkMaterial, seed, 6);
         app.getRootNode().attachChild(worldNode);
 
         app.getCamera().setLocation(new Vector3f(16, 25, 48));
@@ -60,6 +49,9 @@ public class VoxelGameState extends BaseAppState {
             worldNode.removeFromParent();
             worldNode.detachAllChildren();
         }
+        if (chunkManager != null) {
+            chunkManager.clearAll();
+        }
     }
 
     @Override
@@ -70,5 +62,13 @@ public class VoxelGameState extends BaseAppState {
     @Override
     protected void onDisable() {
         // Nada
+    }
+
+    @Override
+    public void update(float tpf) {
+        if (chunkManager != null) {
+            // Gera até 4 chunks por frame para evitar travamento
+            chunkManager.update(app.getCamera().getLocation(), 4);
+        }
     }
 }
