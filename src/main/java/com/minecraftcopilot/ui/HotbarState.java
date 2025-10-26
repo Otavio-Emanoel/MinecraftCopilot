@@ -293,13 +293,22 @@ public class HotbarState extends BaseAppState {
     public void update(float tpf) {
         // Posicionar o item na mão relativo à câmera (inferior direita da tela, um pouco à frente)
         var cam = app.getCamera();
-    // Posiciona no canto inferior direito (mais próximo e discreto)
-    Vector3f pos = cam.getLocation().add(cam.getDirection().mult(0.45f))
-        .add(cam.getLeft().mult(-0.45f))
-        .add(cam.getUp().mult(-0.35f));
+        Vector3f base = cam.getLocation().add(cam.getDirection().mult(0.45f))
+                .add(cam.getLeft().mult(-0.45f))
+                .add(cam.getUp().mult(-0.35f));
+
+        // Sway da mão/Item baseado no head-bob do PlayerController
+        var pc = app.getStateManager().getState(com.minecraftcopilot.player.PlayerController.class);
+        float swayX = 0f, swayY = 0f;
+        if (pc != null) {
+            var sw = pc.getHandSway();
+            swayX = sw.x; swayY = sw.y;
+        }
+        Vector3f pos = base.add(cam.getLeft().mult(-swayX)).add(cam.getUp().mult(swayY));
         handNode.setLocalTranslation(pos);
+
         Quaternion rot = cam.getRotation().clone();
-        Quaternion tilt = new Quaternion().fromAngles(-0.25f, 0.35f, 0.15f);
+        Quaternion tilt = new Quaternion().fromAngles(-0.25f + swayY * 0.7f, 0.35f + swayX * 0.8f, 0.15f + swayX * 0.4f);
         rot = rot.mult(tilt);
         handNode.setLocalRotation(rot);
     }

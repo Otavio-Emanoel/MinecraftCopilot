@@ -13,6 +13,7 @@ import com.jme3.math.FastMath;
 import com.jme3.math.Quaternion;
 import com.jme3.math.Vector3f;
 import com.minecraftcopilot.world.ChunkManager;
+import com.jme3.math.Vector2f;
 
 public class PlayerController extends BaseAppState {
 
@@ -26,8 +27,8 @@ public class PlayerController extends BaseAppState {
     private static final String LOOK_UP = "PC_LookUp";
     private static final String LOOK_DOWN = "PC_LookDown";
 
-    private static final float EYE_HEIGHT = 1.90f; // altura dos olhos (personagem mais alto)
-    private static final float BODY_HEIGHT = 1.90f; // altura do corpo (igual aos olhos para simplificar)
+    private static final float BASE_EYE_HEIGHT = 1.90f; // altura dos olhos (em pé)
+    private static final float BASE_BODY_HEIGHT = 1.90f; // altura do corpo (em pé)
     private static final float HALF_WIDTH = 0.3f;   // metade da largura (como MC ~0.6m)
     private static final float GRAVITY = 19.6f;  // m/s^2
     private static final float JUMP_SPEED = 6.8f;
@@ -45,6 +46,19 @@ public class PlayerController extends BaseAppState {
     private float mouseSensitivity = 2.2f;
     private final ChunkManager chunkManager;
 
+    // Sprint/agachar e animações
+    private static final String MAP_SPRINT = "PC_Sprint";
+    private static final String MAP_CROUCH = "PC_Crouch";
+    private boolean sprintHeld = false;
+    private boolean crouchHeld = false;
+    private float eyeHeight = BASE_EYE_HEIGHT;
+    private float bodyHeight = BASE_BODY_HEIGHT;
+    private final float crouchEye = BASE_EYE_HEIGHT * 0.6f;
+    private final float crouchBody = BASE_BODY_HEIGHT * 0.6f;
+    private float crouchT = 0f; // 0: em pé, 1: agachado
+    private float bobPhase = 0f;
+    private float fovCurrent = 70f;
+
     private final ActionListener input = (name, isPressed, tpf) -> {
         if (!isEnabled()) return; // ignora entradas quando desabilitado (ex.: inventário aberto)
         boolean val = isPressed;
@@ -53,6 +67,8 @@ public class PlayerController extends BaseAppState {
         else if (MAP_LEFT.equals(name)) left = val;
         else if (MAP_RIGHT.equals(name)) right = val;
         else if (MAP_JUMP.equals(name)) jump = val;
+        else if (MAP_SPRINT.equals(name)) sprintHeld = val;
+        else if (MAP_CROUCH.equals(name)) crouchHeld = val;
     };
 
     private final AnalogListener mouse = (name, value, tpf) -> {
@@ -84,7 +100,10 @@ public class PlayerController extends BaseAppState {
         app.getInputManager().addMapping(MAP_LEFT, new KeyTrigger(KeyInput.KEY_A));
         app.getInputManager().addMapping(MAP_RIGHT, new KeyTrigger(KeyInput.KEY_D));
         app.getInputManager().addMapping(MAP_JUMP, new KeyTrigger(KeyInput.KEY_SPACE));
-        app.getInputManager().addListener(input, MAP_FORWARD, MAP_BACK, MAP_LEFT, MAP_RIGHT, MAP_JUMP);
+    // Sprint (Ctrl), Agachar (Left Shift)
+    app.getInputManager().addMapping(MAP_SPRINT, new KeyTrigger(KeyInput.KEY_LCONTROL));
+    app.getInputManager().addMapping(MAP_CROUCH, new KeyTrigger(KeyInput.KEY_LSHIFT));
+    app.getInputManager().addListener(input, MAP_FORWARD, MAP_BACK, MAP_LEFT, MAP_RIGHT, MAP_JUMP, MAP_SPRINT, MAP_CROUCH);
 
         // Desabilita FlyByCamera para não conflitar e usa mapeamento próprio de mouse (com clamp de pitch)
         if (app.getFlyByCamera() != null) {
@@ -108,6 +127,23 @@ public class PlayerController extends BaseAppState {
 
     @Override
     public void update(float tpf) {
+        // Determina estado de agachar com bloqueio se não houver espaço para levantar
+        float prevEye = eyeHeight;
+        float prevFeetY = position.y - prevEye;
+
+        boolean wantCrouch = crouchHeld;
+        if (!wantCrouch && !hasHeadroom()) {
+            wantCrouch = true;
+        }
+        float targetCrouch = wantCrouch ? 1f : 0f;
+        // Suaviza transição
+        float rate = 7.5f;
+        crouchT += (targetCrouch - crouchT) * FastMath.clamp(rate * tpf, 0f, 1f);
+        eyeHeight = FastMath.interpolateLinear(crouchT, BASE_EYE_HEIGHT, crouchEye);
+        bodyHeight = FastMath.interpolateLinear(crouchT, BASE_BODY_HEIGHT, crouchBody);
+        // Mantém os pés na mesma altura ao mudar a altura dos olhos
+        position.y = prevFeetY + eyeHeight;
+
         // Movimento no plano XZ baseado na câmera
         Vector3f camDir = app.getCamera().getDirection().clone();
         camDir.y = 0;
@@ -121,7 +157,10 @@ public class PlayerController extends BaseAppState {
         if (back) move.addLocal(camDir.negate());
         if (left) move.addLocal(camLeft);
         if (right) move.addLocal(camLeft.negate());
-        if (move.lengthSquared() > 0) move.normalizeLocal().multLocal(MOVE_SPEED * tpf);
+        float speedMul = 1.0f;
+        if (sprintHeld && !wantCrouch) speedMul = 1.6f;
+        if (wantCrouch) speedMul = 0.45f;
+        if (move.lengthSquared() > 0) move.normalizeLocal().multLocal(MOVE_SPEED * speedMul * tpf);
 
         // Gravidade simples
         vy -= GRAVITY * tpf;
@@ -156,6 +195,27 @@ public class PlayerController extends BaseAppState {
         rot.fromAngles(pitch, yaw, 0f);
         app.getCamera().setRotation(rot);
         app.getCamera().setLocation(position);
+
+        // Head-bob (só quando movendo)
+        boolean isMoving = (move.x != 0f || move.z != 0f);
+        if (isMoving) {
+            float freq = 8.0f * speedMul;
+            bobPhase += tpf * freq;
+        } else {
+            // relaxa fase lentamente para 0
+            bobPhase += tpf * 4f * (bobPhase > 0 ? -1f : 1f);
+            if (FastMath.abs(bobPhase) < 0.001f) bobPhase = 0f;
+        }
+        float amp = (wantCrouch ? 0.015f : 0.03f) * (sprintHeld && !wantCrouch ? 1.4f : 1.0f);
+        float bob = FastMath.sin(bobPhase) * amp;
+        app.getCamera().setLocation(app.getCamera().getLocation().add(0, bob, 0));
+
+        // Efeito de FOV dinâmico
+        float baseFov = 70f;
+        float targetFov = baseFov + (sprintHeld && !wantCrouch ? 5f : 0f) + (wantCrouch ? -3f : 0f);
+        fovCurrent += (targetFov - fovCurrent) * FastMath.clamp(8f * tpf, 0f, 1f);
+        float aspect = (float) app.getCamera().getWidth() / (float) app.getCamera().getHeight();
+        app.getCamera().setFrustumPerspective(fovCurrent, aspect, 0.05f, 1000f);
     }
 
     @Override
@@ -166,6 +226,8 @@ public class PlayerController extends BaseAppState {
             if (app.getInputManager().hasMapping(MAP_LEFT)) app.getInputManager().deleteMapping(MAP_LEFT);
             if (app.getInputManager().hasMapping(MAP_RIGHT)) app.getInputManager().deleteMapping(MAP_RIGHT);
             if (app.getInputManager().hasMapping(MAP_JUMP)) app.getInputManager().deleteMapping(MAP_JUMP);
+            if (app.getInputManager().hasMapping(MAP_SPRINT)) app.getInputManager().deleteMapping(MAP_SPRINT);
+            if (app.getInputManager().hasMapping(MAP_CROUCH)) app.getInputManager().deleteMapping(MAP_CROUCH);
             if (app.getInputManager().hasMapping(LOOK_LEFT)) app.getInputManager().deleteMapping(LOOK_LEFT);
             if (app.getInputManager().hasMapping(LOOK_RIGHT)) app.getInputManager().deleteMapping(LOOK_RIGHT);
             if (app.getInputManager().hasMapping(LOOK_UP)) app.getInputManager().deleteMapping(LOOK_UP);
@@ -189,6 +251,9 @@ public class PlayerController extends BaseAppState {
         }
         // Limpa estados de movimento para não "grudar" ao reativar
         fwd = back = left = right = jump = false;
+        sprintHeld = false;
+        // mantém crouch se não houver espaço para levantar; caso contrário, libera
+        if (hasHeadroom()) crouchHeld = false;
     }
 
     private void clampPitch() {
@@ -206,7 +271,7 @@ public class PlayerController extends BaseAppState {
     }
 
     private float resolveAxisY(float dy) {
-        float feetY = position.y - EYE_HEIGHT;
+        float feetY = position.y - eyeHeight;
         float newFeetY = feetY + dy;
         float minX = position.x - HALF_WIDTH;
         float maxX = position.x + HALF_WIDTH;
@@ -214,14 +279,14 @@ public class PlayerController extends BaseAppState {
         float maxZ = position.z + HALF_WIDTH;
         if (dy > 0) {
             // subindo: checar blocos no topo
-            float topY = newFeetY + BODY_HEIGHT;
+            float topY = newFeetY + bodyHeight;
             int by = floor(topY);
             for (int ix = floor(minX); ix <= floor(maxX - EPS); ix++) {
                 for (int iz = floor(minZ); iz <= floor(maxZ - EPS); iz++) {
                     if (solidAt(ix, by, iz)) {
                         // colide com o bloco: ajusta topo para a face inferior do bloco
                         topY = by - EPS;
-                        newFeetY = topY - BODY_HEIGHT;
+                        newFeetY = topY - bodyHeight;
                         vy = 0f;
                         break;
                     }
@@ -247,8 +312,8 @@ public class PlayerController extends BaseAppState {
     }
 
     private float resolveAxisX(float dx) {
-        float minY = position.y - EYE_HEIGHT;
-        float maxY = minY + BODY_HEIGHT;
+    float minY = position.y - eyeHeight;
+    float maxY = minY + bodyHeight;
         float minZ = position.z - HALF_WIDTH;
         float maxZ = position.z + HALF_WIDTH;
         if (dx > 0) {
@@ -280,8 +345,8 @@ public class PlayerController extends BaseAppState {
     }
 
     private float resolveAxisZ(float dz) {
-        float minY = position.y - EYE_HEIGHT;
-        float maxY = minY + BODY_HEIGHT;
+    float minY = position.y - eyeHeight;
+    float maxY = minY + bodyHeight;
         float minX = position.x - HALF_WIDTH;
         float maxX = position.x + HALF_WIDTH;
         if (dz > 0) {
@@ -310,5 +375,33 @@ public class PlayerController extends BaseAppState {
             }
         }
         return dz;
+    }
+
+    private boolean hasHeadroom() {
+        // Verifica se há espaço acima para ficar em pé (do pé até BASE_BODY_HEIGHT)
+        float feetY = position.y - eyeHeight; // posição do pé atual
+        float minX = position.x - HALF_WIDTH;
+        float maxX = position.x + HALF_WIDTH;
+        float minZ = position.z - HALF_WIDTH;
+        float maxZ = position.z + HALF_WIDTH;
+        int startBy = floor(feetY + bodyHeight); // topo atual
+        int endBy = floor(feetY + BASE_BODY_HEIGHT - EPS); // topo em pé
+        for (int by = startBy; by <= endBy; by++) {
+            for (int ix = floor(minX); ix <= floor(maxX - EPS); ix++) {
+                for (int iz = floor(minZ); iz <= floor(maxZ - EPS); iz++) {
+                    if (solidAt(ix, by, iz)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    // Exposto para UI/Hotbar fazer sway do item/mao
+    public Vector2f getHandSway() {
+        float hor = FastMath.sin(bobPhase * 0.5f) * 0.05f * (sprintHeld ? 1.3f : 1f);
+        float ver = FastMath.sin(bobPhase) * 0.06f * (sprintHeld ? 1.2f : 1f) * (crouchHeld ? 0.6f : 1f);
+        return new Vector2f(hor, ver);
     }
 }
