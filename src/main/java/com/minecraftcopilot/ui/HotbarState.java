@@ -68,20 +68,21 @@ public class HotbarState extends BaseAppState {
 
     public HotbarState(Material blockMaterial) {
         this.blockMaterial = blockMaterial;
-        // Pré-popular alguns blocos comuns
-        slots[0] = BlockType.GRASS;
-        slots[1] = BlockType.DIRT;
-        slots[2] = BlockType.STONE;
-        slots[3] = BlockType.DIRT;
-        slots[4] = BlockType.STONE;
-        slots[5] = BlockType.GRASS;
-        slots[6] = BlockType.DIRT;
-        slots[7] = BlockType.STONE;
-        slots[8] = BlockType.GRASS;
+        // Inicia vazio (o jogador pegará itens do inventário)
+        for (int i = 0; i < slots.length; i++) slots[i] = null;
     }
 
     public BlockType getSelectedBlock() {
         return slots[selected];
+    }
+
+    public int getSelectedIndex() { return selected; }
+
+    public void setSlot(int index, BlockType type) {
+        if (index < 0 || index >= slots.length) return;
+        slots[index] = type;
+        updateLabelText(index);
+        if (index == selected) rebuildHandItem();
     }
 
     @Override
@@ -181,6 +182,13 @@ public class HotbarState extends BaseAppState {
         for (int i = 0; i < labels.size(); i++) {
             labels.get(i).setColor(i == selected ? ColorRGBA.White : new ColorRGBA(0.8f, 0.85f, 0.9f, 1f));
         }
+    }
+
+    private void updateLabelText(int index) {
+        if (index < 0 || index >= labels.size()) return;
+        BitmapText t = labels.get(index);
+        String name = (slots[index] != null ? slots[index].name() : "-");
+        t.setText((index + 1) + "\n" + name);
     }
 
     private void updateHighlightPosition() {
