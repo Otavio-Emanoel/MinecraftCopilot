@@ -22,7 +22,8 @@ public class VoxelGameState extends BaseAppState {
 
     private SimpleApplication app;
     private Node worldNode;
-    private Material chunkMaterial;
+    private Material chunkMaterialSolid;
+    private Material chunkMaterialWater;
     private ChunkManager chunkManager;
     private BitmapText crosshair;
     private BitmapFont font;
@@ -30,11 +31,20 @@ public class VoxelGameState extends BaseAppState {
     private HotbarState hotbar;
     private BlockInteractionState blockInteraction;
     private InventoryState inventory;
+    private int worldSeed = 1337;
+    private GameMode gameMode = GameMode.CREATIVE;
     private static final String MAP_INV = "VG_Inventory";
     private final ActionListener invListener = (name, isPressed, tpf) -> {
         if (!isPressed) return;
         if (MAP_INV.equals(name)) toggleInventory();
     };
+
+    public VoxelGameState() {}
+
+    public VoxelGameState(int seed, GameMode mode) {
+        this.worldSeed = seed;
+        this.gameMode = (mode != null ? mode : GameMode.CREATIVE);
+    }
 
     @Override
     protected void initialize(Application application) {
@@ -53,22 +63,25 @@ public class VoxelGameState extends BaseAppState {
             app.getInputManager().setCursorVisible(false); // esconde e "gruda" o mouse na janela
         }
 
-        // Material com textura (atlas) + vertex color para sombreamento simples
-    this.chunkMaterial = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
-    this.chunkMaterial.setBoolean("VertexColor", true);
+        // Materiais com textura (atlas) + vertex color
+        this.chunkMaterialSolid = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        this.chunkMaterialSolid.setBoolean("VertexColor", true);
     // Aumenta quantidade de tiles para incluir tronco/folhas/água animada (3 frames)
     TextureAtlas atlas = new TextureAtlas(16, 10);
-        Chunk.ATLAS = atlas;
-        this.chunkMaterial.setTexture("ColorMap", atlas.buildTexture(app.getAssetManager()));
-        // Podemos manter culling Off por robustez no protótipo
-        this.chunkMaterial.getAdditionalRenderState().setFaceCullMode(
-                com.jme3.material.RenderState.FaceCullMode.Off);
-    // Habilita transparência (usaremos alpha por vértice só na água)
-    this.chunkMaterial.getAdditionalRenderState().setBlendMode(
+    Chunk.ATLAS = atlas;
+    var tex = atlas.buildTexture(app.getAssetManager());
+    this.chunkMaterialSolid.setTexture("ColorMap", tex);
+    // Água: material clonado com blend ativado
+    this.chunkMaterialWater = this.chunkMaterialSolid.clone();
+    this.chunkMaterialWater.getAdditionalRenderState().setBlendMode(
         com.jme3.material.RenderState.BlendMode.Alpha);
+        // Podemos manter culling Off por robustez no protótipo
+    this.chunkMaterialSolid.getAdditionalRenderState().setFaceCullMode(
+                com.jme3.material.RenderState.FaceCullMode.Off);
+    this.chunkMaterialWater.getAdditionalRenderState().setFaceCullMode(
+        com.jme3.material.RenderState.FaceCullMode.Off);
 
-        int seed = 1337;
-        this.chunkManager = new ChunkManager(worldNode, chunkMaterial, seed, 6);
+    this.chunkManager = new ChunkManager(worldNode, chunkMaterialSolid, worldSeed, 6);
         app.getRootNode().attachChild(worldNode);
 
         app.getCamera().setLocation(new Vector3f(16, 30, 48));
@@ -81,8 +94,8 @@ public class VoxelGameState extends BaseAppState {
         player = new PlayerController(chunkManager);
         getStateManager().attach(player);
 
-        // Hotbar com 9 slots e item na mão
-        hotbar = new HotbarState(chunkMaterial);
+    // Hotbar com 9 slots e item na mão (usa o material sólido com atlas)
+    hotbar = new HotbarState(chunkMaterialSolid);
         getStateManager().attach(hotbar);
 
         // Interação com blocos: contorno + destruir com clique esquerdo + colocar com direito

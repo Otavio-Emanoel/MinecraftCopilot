@@ -10,7 +10,7 @@ public enum BlockType {
     STONE(3, new ColorRGBA(0.62f, 0.62f, 0.62f, 1f), 3, 3, 3),
     WOOD(4, new ColorRGBA(0.50f, 0.38f, 0.25f, 1f), 5, 4, 5),
     LEAVES(5, new ColorRGBA(0.30f, 0.55f, 0.25f, 1f), 6, 6, 6),
-    WATER(6, new ColorRGBA(0.2f, 0.5f, 1.0f, 1f), 7, 7, 7);
+    WATER(6, new ColorRGBA(0.15f, 0.45f, 0.95f, 1f), 7, 7, 7);
 
     public final byte id;
     public final ColorRGBA color;

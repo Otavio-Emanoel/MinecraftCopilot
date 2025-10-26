@@ -171,18 +171,38 @@ public class TextureAtlas {
     }
 
     private void drawWater(int idx, int phase) {
-        Graphics2D g = atlas.createGraphics();
-        int x = idx * tileSize;
-        // azul com padrão ondulado simples
-        g.setColor(new Color(40, 120, 220, 255));
-        g.fillRect(x, 0, tileSize, tileSize);
-        g.setColor(new Color(90, 170, 255, 185));
-        int offset = (phase * Math.max(1, tileSize/8)) % Math.max(1, tileSize/4 + 1);
-        for (int i = 0; i < tileSize; i += Math.max(1, tileSize/8)) {
-            int yy = i + offset;
-            g.drawArc(x - tileSize/2, yy - tileSize/4, tileSize*2, tileSize/2, 0, 180);
+        // Procedural: base azul com ondas senoidais e leve gradiente vertical
+        int ox = idx * tileSize;
+        final float p = phase / 3.0f; // fase 0..1
+        for (int yy = 0; yy < tileSize; yy++) {
+            float fy = yy / (float) (tileSize - 1);
+            for (int xx = 0; xx < tileSize; xx++) {
+                float fx = xx / (float) (tileSize - 1);
+                // Ondas com duas frequências e deslocamento por phase
+                double w1 = Math.sin((fx * 7.6 + p * 1.15 + fy * 0.4) * Math.PI * 2.0);
+                double w2 = Math.sin((fx * 12.3 + fy * 3.1 + p * 2.1) * Math.PI * 2.0);
+                double waves = 0.5 * w1 + 0.5 * w2;
+                // Gradiente vertical (mais claro no topo)
+                float grad = 0.12f * (1f - fy);
+                // Brilho das cristas
+                float crest = (float) Math.max(0.0, waves * 0.5 + 0.5);
+                // Cor base
+                int br = clamp255((int) (30 + 20 * grad));
+                int bg = clamp255((int) (110 + 30 * grad));
+                int bb = clamp255((int) (200 + 30 * grad));
+                // Realce pela crista
+                br = clamp255((int) (br + crest * 20));
+                bg = clamp255((int) (bg + crest * 35));
+                bb = clamp255((int) (bb + crest * 45));
+                int a = 255; // textura opaca; transparência controlada por vertex color
+                int argb = ((a & 0xFF) << 24) | ((br & 0xFF) << 16) | ((bg & 0xFF) << 8) | (bb & 0xFF);
+                atlas.setRGB(ox + xx, yy, argb);
+            }
         }
-        g.dispose();
+    }
+
+    private static int clamp255(int v) {
+        return (v < 0 ? 0 : (v > 255 ? 255 : v));
     }
 
     public float[] getUV(int tileIndex) {

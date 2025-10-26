@@ -20,12 +20,18 @@ import com.jme3.material.RenderState;
 import com.jme3.renderer.queue.RenderQueue;
 import com.jme3.math.Vector2f;
 import com.minecraftcopilot.state.VoxelGameState;
+import com.minecraftcopilot.state.GameMode;
 
 public class MainMenuState extends BaseAppState {
 
     private static final String MAP_PLAY = "Menu_Play";
     private static final String MAP_EXIT = "Menu_Exit";
     private static final String MAP_CLICK = "Menu_Click";
+    private static final String MAP_BACKSPACE = "Menu_Backspace";
+    private static final String MAP_MINUS = "Menu_Minus";
+    private static final String[] MAP_DIGITS = {
+        "Menu_0","Menu_1","Menu_2","Menu_3","Menu_4","Menu_5","Menu_6","Menu_7","Menu_8","Menu_9"
+    };
 
     private SimpleApplication app;
     private Node guiRoot;
@@ -38,6 +44,25 @@ public class MainMenuState extends BaseAppState {
     private Geometry btnExitBg;
     private BitmapText btnExitText;
     private Geometry bgOverlay;
+
+    // Seed UI
+    private Geometry seedBoxBg;
+    private BitmapText seedLabel;
+    private BitmapText seedText;
+    private boolean seedFocused = false;
+    private StringBuilder seedBuilder = new StringBuilder();
+    private float seedX, seedY, seedW, seedH;
+
+    // Game mode UI
+    private Geometry modeLabelBg;
+    private BitmapText modeLabel;
+    private Geometry modeCreativeBg;
+    private BitmapText modeCreativeText;
+    private Geometry modeSurvivalBg;
+    private BitmapText modeSurvivalText;
+    private float modeCX, modeCY, modeCW, modeCH;
+    private float modeSX, modeSY, modeSW, modeSH;
+    private GameMode selectedMode = GameMode.CREATIVE;
 
     // Bounds para hit-test
     private float playX, playY, playW, playH;
@@ -53,6 +78,27 @@ public class MainMenuState extends BaseAppState {
                 app.stop();
             } else if (MAP_CLICK.equals(name)) {
                 handleClick();
+            } else if (MAP_BACKSPACE.equals(name)) {
+                if (seedFocused && seedBuilder.length() > 0) {
+                    seedBuilder.deleteCharAt(seedBuilder.length()-1);
+                    refreshSeedText();
+                }
+            } else if (MAP_MINUS.equals(name)) {
+                if (seedFocused) {
+                    if (seedBuilder.length() == 0) {
+                        seedBuilder.append('-');
+                        refreshSeedText();
+                    }
+                }
+            } else {
+                // dígitos
+                for (int i = 0; i < MAP_DIGITS.length; i++) {
+                    if (MAP_DIGITS[i].equals(name) && seedFocused) {
+                        seedBuilder.append((char)('0' + i));
+                        refreshSeedText();
+                        break;
+                    }
+                }
             }
         }
     };
@@ -86,7 +132,7 @@ public class MainMenuState extends BaseAppState {
     title.setColor(new ColorRGBA(0.95f, 0.98f, 1f, 1f));
     title.setSize(font.getCharSet().getRenderedSize() * 1.8f);
     float titleX = (width - title.getLineWidth()) / 2f;
-    float titleY = height * 0.70f;
+    float titleY = height * 0.80f;
     title.setLocalTranslation(titleX, titleY, 0);
 
     titleShadow = new BitmapText(font);
@@ -99,7 +145,7 @@ public class MainMenuState extends BaseAppState {
     subtitle.setText("Prototype • jMonkeyEngine 3");
     subtitle.setColor(new ColorRGBA(0.8f, 0.9f, 1f, 0.9f));
     subtitle.setSize(font.getCharSet().getRenderedSize() * 0.9f);
-    subtitle.setLocalTranslation((width - subtitle.getLineWidth()) / 2f, height * 0.62f, 0);
+    subtitle.setLocalTranslation((width - subtitle.getLineWidth()) / 2f, height * 0.73f, 0);
 
     guiRoot.attachChild(titleShadow);
     guiRoot.attachChild(title);
@@ -110,7 +156,7 @@ public class MainMenuState extends BaseAppState {
     float btnH = 56f;
     playW = btnW; playH = btnH;
     playX = (width - btnW) / 2f;
-    playY = height * 0.44f;
+    playY = height * 0.35f;
     btnPlayBg = new Geometry("btn-play", new Quad(btnW, btnH));
     Material mp = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
     mp.setColor("Color", new ColorRGBA(0.15f, 0.5f, 0.25f, 0.9f));
@@ -128,10 +174,88 @@ public class MainMenuState extends BaseAppState {
         playY + (btnH + btnPlayText.getLineHeight())/2f, 0);
     guiRoot.attachChild(btnPlayText);
 
+    // Campo Seed (acima dos botões)
+    seedW = Math.max(320f, width * 0.35f);
+    seedH = 44f;
+    seedX = (width - seedW) / 2f;
+    seedY = height * 0.48f;
+    seedBoxBg = new Geometry("seed-box", new Quad(seedW, seedH));
+    Material sb = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+    sb.setColor("Color", new ColorRGBA(0.12f, 0.12f, 0.12f, 0.85f));
+    sb.getAdditionalRenderState().setBlendMode(RenderState.BlendMode.Alpha);
+    seedBoxBg.setMaterial(sb);
+    seedBoxBg.setQueueBucket(RenderQueue.Bucket.Gui);
+    seedBoxBg.setLocalTranslation(seedX, seedY, 0);
+    guiRoot.attachChild(seedBoxBg);
+
+    seedLabel = new BitmapText(font);
+    seedLabel.setText("Seed:");
+    seedLabel.setSize(font.getCharSet().getRenderedSize() * 0.9f);
+    seedLabel.setColor(new ColorRGBA(0.9f, 0.95f, 1f, 0.9f));
+    seedLabel.setLocalTranslation(seedX + 10f, seedY + (seedH + seedLabel.getLineHeight())/2f, 0);
+    guiRoot.attachChild(seedLabel);
+
+    seedText = new BitmapText(font);
+    seedText.setSize(font.getCharSet().getRenderedSize() * 0.9f);
+    seedText.setColor(ColorRGBA.White);
+    refreshSeedText();
+    guiRoot.attachChild(seedText);
+
+    // Modo de jogo (abaixo do seed)
+    float labelY = height * 0.62f;
+    modeLabel = new BitmapText(font);
+    modeLabel.setText("Modo de Jogo:");
+    modeLabel.setSize(font.getCharSet().getRenderedSize() * 0.9f);
+    modeLabel.setColor(new ColorRGBA(0.9f, 0.95f, 1f, 0.9f));
+    modeLabel.setLocalTranslation((width - modeLabel.getLineWidth())/2f, labelY + modeLabel.getLineHeight(), 0);
+    guiRoot.attachChild(modeLabel);
+
+    // Botões Criativo / Survival
+    modeCW = 120f; modeCH = 40f;
+    modeSW = 120f; modeSH = 40f;
+    float gap = 18f;
+    float total = modeCW + modeSW + gap;
+    modeCX = (width - total)/2f;
+    modeCY = height * 0.57f;
+    modeSX = modeCX + modeCW + gap;
+    modeSY = modeCY;
+
+    modeCreativeBg = new Geometry("mode-creative", new Quad(modeCW, modeCH));
+    Material mc = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+    mc.setColor("Color", new ColorRGBA(0.2f, 0.5f, 0.25f, 0.9f));
+    mc.getAdditionalRenderState().setBlendMode(RenderState.BlendMode.Alpha);
+    modeCreativeBg.setMaterial(mc);
+    modeCreativeBg.setQueueBucket(RenderQueue.Bucket.Gui);
+    modeCreativeBg.setLocalTranslation(modeCX, modeCY, 0);
+    guiRoot.attachChild(modeCreativeBg);
+
+    modeCreativeText = new BitmapText(font);
+    modeCreativeText.setText("Criativo");
+    modeCreativeText.setSize(font.getCharSet().getRenderedSize() * 0.9f);
+    modeCreativeText.setColor(ColorRGBA.White);
+    modeCreativeText.setLocalTranslation(modeCX + (modeCW - modeCreativeText.getLineWidth())/2f, modeCY + (modeCH + modeCreativeText.getLineHeight())/2f, 0);
+    guiRoot.attachChild(modeCreativeText);
+
+    modeSurvivalBg = new Geometry("mode-survival", new Quad(modeSW, modeSH));
+    Material ms = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+    ms.setColor("Color", new ColorRGBA(0.12f, 0.12f, 0.12f, 0.85f));
+    ms.getAdditionalRenderState().setBlendMode(RenderState.BlendMode.Alpha);
+    modeSurvivalBg.setMaterial(ms);
+    modeSurvivalBg.setQueueBucket(RenderQueue.Bucket.Gui);
+    modeSurvivalBg.setLocalTranslation(modeSX, modeSY, 0);
+    guiRoot.attachChild(modeSurvivalBg);
+
+    modeSurvivalText = new BitmapText(font);
+    modeSurvivalText.setText("Survival");
+    modeSurvivalText.setSize(font.getCharSet().getRenderedSize() * 0.9f);
+    modeSurvivalText.setColor(new ColorRGBA(0.9f, 0.9f, 0.9f, 0.9f));
+    modeSurvivalText.setLocalTranslation(modeSX + (modeSW - modeSurvivalText.getLineWidth())/2f, modeSY + (modeSH + modeSurvivalText.getLineHeight())/2f, 0);
+    guiRoot.attachChild(modeSurvivalText);
+
     // Botão Sair
     exitW = btnW; exitH = btnH;
     exitX = playX;
-    exitY = playY - (btnH + 14f);
+    exitY = height * 0.25f;
     btnExitBg = new Geometry("btn-exit", new Quad(exitW, exitH));
     Material me = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
     me.setColor("Color", new ColorRGBA(0.35f, 0.15f, 0.15f, 0.9f));
@@ -152,13 +276,20 @@ public class MainMenuState extends BaseAppState {
         app.getInputManager().addMapping(MAP_PLAY, new KeyTrigger(KeyInput.KEY_RETURN));
         app.getInputManager().addMapping(MAP_EXIT, new KeyTrigger(KeyInput.KEY_ESCAPE));
     app.getInputManager().addMapping(MAP_CLICK, new MouseButtonTrigger(MouseInput.BUTTON_LEFT));
-    app.getInputManager().addListener(listener, MAP_PLAY, MAP_EXIT, MAP_CLICK);
+        app.getInputManager().addMapping(MAP_BACKSPACE, new KeyTrigger(KeyInput.KEY_BACK));
+        app.getInputManager().addMapping(MAP_MINUS, new KeyTrigger(KeyInput.KEY_MINUS));
+        for (int i = 0; i < MAP_DIGITS.length; i++) {
+            app.getInputManager().addMapping(MAP_DIGITS[i], new KeyTrigger(KeyInput.KEY_0 + i));
+        }
+    app.getInputManager().addListener(listener, MAP_PLAY, MAP_EXIT, MAP_CLICK, MAP_BACKSPACE, MAP_MINUS);
+        app.getInputManager().addListener(listener, MAP_DIGITS);
     }
 
     private void startGame() {
         // Desabilitar input do menu e trocar para jogo
         getStateManager().detach(this);
-        getStateManager().attach(new VoxelGameState());
+        int seed = getSelectedSeed();
+        getStateManager().attach(new VoxelGameState(seed, selectedMode));
     }
 
     @Override
@@ -172,10 +303,23 @@ public class MainMenuState extends BaseAppState {
         if (btnExitBg != null) btnExitBg.removeFromParent();
         if (btnExitText != null) btnExitText.removeFromParent();
         if (bgOverlay != null) bgOverlay.removeFromParent();
+        if (seedBoxBg != null) seedBoxBg.removeFromParent();
+        if (seedLabel != null) seedLabel.removeFromParent();
+        if (seedText != null) seedText.removeFromParent();
+        if (modeLabel != null) modeLabel.removeFromParent();
+        if (modeCreativeBg != null) modeCreativeBg.removeFromParent();
+        if (modeCreativeText != null) modeCreativeText.removeFromParent();
+        if (modeSurvivalBg != null) modeSurvivalBg.removeFromParent();
+        if (modeSurvivalText != null) modeSurvivalText.removeFromParent();
         if (app != null) {
             if (app.getInputManager().hasMapping(MAP_PLAY)) app.getInputManager().deleteMapping(MAP_PLAY);
             if (app.getInputManager().hasMapping(MAP_EXIT)) app.getInputManager().deleteMapping(MAP_EXIT);
             if (app.getInputManager().hasMapping(MAP_CLICK)) app.getInputManager().deleteMapping(MAP_CLICK);
+            if (app.getInputManager().hasMapping(MAP_BACKSPACE)) app.getInputManager().deleteMapping(MAP_BACKSPACE);
+            if (app.getInputManager().hasMapping(MAP_MINUS)) app.getInputManager().deleteMapping(MAP_MINUS);
+            for (String m : MAP_DIGITS) {
+                if (app.getInputManager().hasMapping(m)) app.getInputManager().deleteMapping(m);
+            }
             app.getInputManager().removeListener(listener);
         }
     }
@@ -214,6 +358,29 @@ public class MainMenuState extends BaseAppState {
             m.setColor("Color", overExit ? new ColorRGBA(0.55f, 0.20f, 0.20f, 1f)
                                           : new ColorRGBA(0.35f, 0.15f, 0.15f, 0.9f));
         }
+
+        // Seed box hover visual
+        if (seedBoxBg != null) {
+            boolean overSeed = hit(cur.x, cur.y, seedX, seedY, seedW, seedH);
+            var m = seedBoxBg.getMaterial();
+            m.setColor("Color", overSeed || seedFocused ? new ColorRGBA(0.16f, 0.16f, 0.16f, 0.95f)
+                                                         : new ColorRGBA(0.12f, 0.12f, 0.12f, 0.85f));
+        }
+
+        // Modo hover e seleção
+        if (modeCreativeBg != null && modeSurvivalBg != null) {
+            boolean overC = hit(cur.x, cur.y, modeCX, modeCY, modeCW, modeCH);
+            boolean overS = hit(cur.x, cur.y, modeSX, modeSY, modeSW, modeSH);
+            var mc = modeCreativeBg.getMaterial();
+            var ms = modeSurvivalBg.getMaterial();
+            if (selectedMode == GameMode.CREATIVE) {
+                mc.setColor("Color", overC ? new ColorRGBA(0.22f, 0.62f, 0.34f, 1f) : new ColorRGBA(0.2f, 0.5f, 0.25f, 0.9f));
+                ms.setColor("Color", overS ? new ColorRGBA(0.2f, 0.2f, 0.2f, 0.95f) : new ColorRGBA(0.12f, 0.12f, 0.12f, 0.85f));
+            } else {
+                ms.setColor("Color", overS ? new ColorRGBA(0.22f, 0.62f, 0.34f, 1f) : new ColorRGBA(0.2f, 0.5f, 0.25f, 0.9f));
+                mc.setColor("Color", overC ? new ColorRGBA(0.2f, 0.2f, 0.2f, 0.95f) : new ColorRGBA(0.12f, 0.12f, 0.12f, 0.85f));
+            }
+        }
     }
 
     private boolean hit(float mx, float my, float x, float y, float w, float h) {
@@ -226,6 +393,40 @@ public class MainMenuState extends BaseAppState {
             startGame();
         } else if (hit(cur.x, cur.y, exitX, exitY, exitW, exitH)) {
             app.stop();
+        } else if (hit(cur.x, cur.y, seedX, seedY, seedW, seedH)) {
+            seedFocused = true;
+        } else if (hit(cur.x, cur.y, modeCX, modeCY, modeCW, modeCH)) {
+            selectedMode = GameMode.CREATIVE;
+        } else if (hit(cur.x, cur.y, modeSX, modeSY, modeSW, modeSH)) {
+            selectedMode = GameMode.SURVIVAL; // por enquanto não tem efeito no jogo
+        } else {
+            seedFocused = false;
+        }
+    }
+
+    private void refreshSeedText() {
+        String txt = (seedBuilder.length() == 0) ? "(aleatória)" : seedBuilder.toString();
+        seedText.setText(txt);
+        seedText.setLocalTranslation(seedX + 10f + seedLabelWidth(), seedY + (seedH + seedText.getLineHeight())/2f, 0);
+    }
+
+    private float seedLabelWidth() {
+        return font.getLineWidth("Seed:") + 8f;
+    }
+
+    private int getSelectedSeed() {
+        if (seedBuilder.length() == 0) {
+            long t = System.nanoTime();
+            int s = (int) (t ^ (t >>> 32));
+            return (s == 0 ? 1337 : s);
+        }
+        try {
+            long v = Long.parseLong(seedBuilder.toString());
+            return (int) (v ^ (v >>> 32));
+        } catch (NumberFormatException ex) {
+            // fallback por hash
+            int h = seedBuilder.toString().hashCode();
+            return (h == 0 ? 1337 : h);
         }
     }
 }

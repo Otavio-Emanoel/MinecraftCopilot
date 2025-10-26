@@ -5,6 +5,7 @@ import com.jme3.math.ColorRGBA;
 import com.jme3.math.Vector3f;
 import com.jme3.scene.Geometry;
 import com.jme3.scene.Mesh;
+import com.jme3.scene.Node;
 import com.jme3.scene.VertexBuffer;
 import com.jme3.util.BufferUtils;
 import com.minecraftcopilot.gfx.TextureAtlas;
@@ -248,10 +249,25 @@ public class Chunk {
     }
 
     public Geometry buildGeometry(Material mat) {
-    List<Float> positions = new ArrayList<>();
-    List<Float> colors = new ArrayList<>();
-    List<Float> uvs = new ArrayList<>();
-    List<Integer> indices = new ArrayList<>();
+        // Mantido por compatibilidade (gera tudo como um único mesh Opaque)
+        Node n = buildGeometryPair(mat, mat);
+        // Retorna um Geometry vazio (legacy). Preferir buildGeometryPair no gerenciador.
+        Mesh mesh = new Mesh();
+        Geometry g = new Geometry("chunk-legacy-" + cx + "," + cz, mesh);
+        g.setMaterial(mat);
+        return g;
+    }
+
+    public Node buildGeometryPair(Material solidMat, Material waterMat) {
+        List<Float> posSolid = new ArrayList<>();
+        List<Float> colSolid = new ArrayList<>();
+        List<Float> uvSolid = new ArrayList<>();
+        List<Integer> idxSolid = new ArrayList<>();
+
+        List<Float> posWater = new ArrayList<>();
+        List<Float> colWater = new ArrayList<>();
+        List<Float> uvWater = new ArrayList<>();
+        List<Integer> idxWater = new ArrayList<>();
 
         // Direções: +X, -X, +Y, -Y, +Z, -Z
         final int[][] DIRS = {
@@ -266,73 +282,122 @@ public class Chunk {
                     BlockType t = get(x, y, z);
                     if (!t.isSolid()) continue;
 
+                    int meta = getMeta(x, y, z);
+                    boolean isWater = (t == BlockType.WATER);
                     for (int f = 0; f < 6; f++) {
                         int nx = x + DIRS[f][0];
                         int ny = y + DIRS[f][1];
                         int nz = z + DIRS[f][2];
                         BlockType n = get(nx, ny, nz);
-                        if (n.isSolid()) continue; // face interna
-                        addFace(positions, colors, uvs, indices, x, y, z, f, t);
+                        if (!isWater) {
+                            if (n.isSolid()) continue; // sólidos não mostram face contra água
+                            addFaceWithMeta(posSolid, colSolid, uvSolid, idxSolid, x, y, z, f, t, meta);
+                        } else {
+                            // Água: tratamento especial para diferenças de nível entre vizinhos de água
+                            if (n == BlockType.WATER) {
+                                // Para faces laterais, renderiza apenas a parte acima do nível do vizinho
+                                if (f == 0 || f == 1 || f == 4 || f == 5) {
+                                    int nMeta = getMeta(nx, ny, nz);
+                                    float hSelf = computeWaterHeight(x, y, z, meta);
+                                    float hNei = computeWaterHeight(nx, ny, nz, nMeta);
+                                    if (hNei >= hSelf - 1e-4f) continue; // nada exposto
+                                    addWaterSideClipped(posWater, colWater, uvWater, idxWater,
+                                            x, y, z, f, t, hSelf, hNei);
+                                }
+                                // Topo/baixo continuam ocultos contra água
+                                else {
+                                    continue;
+                                }
+                            } else {
+                                // Contra não-água: face completa normal
+                                addFaceWithMeta(posWater, colWater, uvWater, idxWater, x, y, z, f, t, meta);
+                            }
+                        }
                     }
                 }
             }
         }
+        // SOLID mesh
+        Mesh meshS = new Mesh();
+        FloatBuffer posBufS = BufferUtils.createFloatBuffer(posSolid.size());
+        for (Float f : posSolid) posBufS.put(f); posBufS.flip();
+        FloatBuffer colBufS = BufferUtils.createFloatBuffer(colSolid.size());
+        for (Float f : colSolid) colBufS.put(f); colBufS.flip();
+        FloatBuffer uvBufS = BufferUtils.createFloatBuffer(uvSolid.size());
+        for (Float f : uvSolid) uvBufS.put(f); uvBufS.flip();
+        IntBuffer idxBufS = BufferUtils.createIntBuffer(idxSolid.size());
+        for (Integer v : idxSolid) idxBufS.put(v); idxBufS.flip();
+        meshS.setBuffer(VertexBuffer.Type.Position, 3, posBufS);
+        meshS.setBuffer(VertexBuffer.Type.Color, 4, colBufS);
+        meshS.setBuffer(VertexBuffer.Type.TexCoord, 2, uvBufS);
+        meshS.setBuffer(VertexBuffer.Type.Index, 3, idxBufS);
+        meshS.updateBound();
+        Geometry geomS = new Geometry("chunk-solid-" + cx + "," + cz, meshS);
+        geomS.setMaterial(solidMat);
 
-    Mesh mesh = new Mesh();
-    // jME/LWJGL2 exigem NIO buffers diretos
-    FloatBuffer posBuf = BufferUtils.createFloatBuffer(positions.size());
-    for (Float f : positions) posBuf.put(f);
-    posBuf.flip();
+        // WATER mesh
+        Mesh meshW = new Mesh();
+        FloatBuffer posBufW = BufferUtils.createFloatBuffer(posWater.size());
+        for (Float f : posWater) posBufW.put(f); posBufW.flip();
+        FloatBuffer colBufW = BufferUtils.createFloatBuffer(colWater.size());
+        for (Float f : colWater) colBufW.put(f); colBufW.flip();
+        FloatBuffer uvBufW = BufferUtils.createFloatBuffer(uvWater.size());
+        for (Float f : uvWater) uvBufW.put(f); uvBufW.flip();
+        IntBuffer idxBufW = BufferUtils.createIntBuffer(idxWater.size());
+        for (Integer v : idxWater) idxBufW.put(v); idxBufW.flip();
+        meshW.setBuffer(VertexBuffer.Type.Position, 3, posBufW);
+        meshW.setBuffer(VertexBuffer.Type.Color, 4, colBufW);
+        meshW.setBuffer(VertexBuffer.Type.TexCoord, 2, uvBufW);
+        meshW.setBuffer(VertexBuffer.Type.Index, 3, idxBufW);
+        meshW.updateBound();
+        Geometry geomW = new Geometry("chunk-water-" + cx + "," + cz, meshW);
+        geomW.setMaterial(waterMat);
 
-    FloatBuffer colBuf = BufferUtils.createFloatBuffer(colors.size());
-    for (Float f : colors) colBuf.put(f);
-    colBuf.flip();
-
-    FloatBuffer uvBuf = BufferUtils.createFloatBuffer(uvs.size());
-    for (Float f : uvs) uvBuf.put(f);
-    uvBuf.flip();
-
-    IntBuffer idxBuf = BufferUtils.createIntBuffer(indices.size());
-    for (Integer v : indices) idxBuf.put(v);
-    idxBuf.flip();
-
-    mesh.setBuffer(VertexBuffer.Type.Position, 3, posBuf);
-    mesh.setBuffer(VertexBuffer.Type.Color, 4, colBuf);
-    mesh.setBuffer(VertexBuffer.Type.TexCoord, 2, uvBuf);
-    mesh.setBuffer(VertexBuffer.Type.Index, 3, idxBuf);
-        mesh.updateBound();
-
-        Geometry geom = new Geometry("chunk-" + cx + "," + cz, mesh);
-        geom.setMaterial(mat);
-        geom.setLocalTranslation(new Vector3f(cx * SIZE, 0, cz * SIZE));
-        return geom;
+        Node node = new Node("chunk-" + cx + "," + cz);
+        node.attachChild(geomS);
+        node.attachChild(geomW);
+        node.setLocalTranslation(new Vector3f(cx * SIZE, 0, cz * SIZE));
+        return node;
     }
 
-    private static void addFace(List<Float> positions, List<Float> colors, List<Float> uvs, List<Integer> indices,
+    private void addFace(List<Float> positions, List<Float> colors, List<Float> uvs, List<Integer> indices,
                                 int x, int y, int z, int face, BlockType type) {
+        // Wrapper antigo mantido por compatibilidade; busca meta e delega
+        addFaceWithMeta(positions, colors, uvs, indices, x, y, z, face, type, 0);
+    }
+
+    private void addFaceWithMeta(List<Float> positions, List<Float> colors, List<Float> uvs, List<Integer> indices,
+                                        int x, int y, int z, int face, BlockType type, int meta) {
         // Define vértices da face com base no eixo
         float[][] v = new float[4][3];
+        // Altura do topo para água "reduzida" (meta 1..7). Fontes (0) e quedas (8) ficam 1.0
+        float h = 1.0f;
+        boolean isWater = (type == BlockType.WATER);
+        if (isWater) {
+            h = computeWaterHeight(x, y, z, meta);
+        }
         switch (face) {
             // +X
             case 0 -> {
                 v[0] = new float[]{x + 1, y, z};
                 v[1] = new float[]{x + 1, y, z + 1};
-                v[2] = new float[]{x + 1, y + 1, z + 1};
-                v[3] = new float[]{x + 1, y + 1, z};
+                v[2] = new float[]{x + 1, y + h, z + 1};
+                v[3] = new float[]{x + 1, y + h, z};
             }
             // -X
             case 1 -> {
                 v[0] = new float[]{x, y, z + 1};
                 v[1] = new float[]{x, y, z};
-                v[2] = new float[]{x, y + 1, z};
-                v[3] = new float[]{x, y + 1, z + 1};
+                v[2] = new float[]{x, y + h, z};
+                v[3] = new float[]{x, y + h, z + 1};
             }
             // +Y (topo)
             case 2 -> {
-                v[0] = new float[]{x, y + 1, z};
-                v[1] = new float[]{x + 1, y + 1, z};
-                v[2] = new float[]{x + 1, y + 1, z + 1};
-                v[3] = new float[]{x, y + 1, z + 1};
+                float yt = y + (isWater ? h : 1.0f);
+                v[0] = new float[]{x, yt, z};
+                v[1] = new float[]{x + 1, yt, z};
+                v[2] = new float[]{x + 1, yt, z + 1};
+                v[3] = new float[]{x, yt, z + 1};
             }
             // -Y (baixo)
             case 3 -> {
@@ -345,15 +410,15 @@ public class Chunk {
             case 4 -> {
                 v[0] = new float[]{x + 1, y, z + 1};
                 v[1] = new float[]{x, y, z + 1};
-                v[2] = new float[]{x, y + 1, z + 1};
-                v[3] = new float[]{x + 1, y + 1, z + 1};
+                v[2] = new float[]{x, y + h, z + 1};
+                v[3] = new float[]{x + 1, y + h, z + 1};
             }
             // -Z
             case 5 -> {
                 v[0] = new float[]{x, y, z};
                 v[1] = new float[]{x + 1, y, z};
-                v[2] = new float[]{x + 1, y + 1, z};
-                v[3] = new float[]{x, y + 1, z};
+                v[2] = new float[]{x + 1, y + h, z};
+                v[3] = new float[]{x, y + h, z};
             }
         }
 
@@ -417,5 +482,75 @@ public class Chunk {
         indices.add(base);
         indices.add(base + 2);
         indices.add(base + 3);
+    }
+
+    // Calcula a altura visível da água para o bloco (1.0 fonte/queda/declive; 0.5 em superfície plana espalhada)
+    private float computeWaterHeight(int x, int y, int z, int meta) {
+        if (meta > 0 && meta < 8) {
+            BlockType below = get(x, y - 1, z);
+            boolean slope = (below == BlockType.AIR) || (below == BlockType.WATER && getMeta(x, y - 1, z) == 8);
+            return slope ? 1.0f : 0.5f;
+        }
+        return 1.0f;
+    }
+
+    // Renderiza face lateral de água recortada de y+hFrom até y+hTo (mostra apenas a "parede" exposta)
+    private void addWaterSideClipped(List<Float> positions, List<Float> colors, List<Float> uvs, List<Integer> indices,
+                                     int x, int y, int z, int face, BlockType type, float hTo, float hFrom) {
+        // Segurança
+        if (hTo <= hFrom + 1e-5f) return;
+
+        float y0 = y + hFrom;
+        float y1 = y + hTo;
+
+        float[][] v = new float[4][3];
+        switch (face) {
+            case 0 -> { // +X
+                v[0] = new float[]{x + 1, y0, z};
+                v[1] = new float[]{x + 1, y0, z + 1};
+                v[2] = new float[]{x + 1, y1, z + 1};
+                v[3] = new float[]{x + 1, y1, z};
+            }
+            case 1 -> { // -X
+                v[0] = new float[]{x, y0, z + 1};
+                v[1] = new float[]{x, y0, z};
+                v[2] = new float[]{x, y1, z};
+                v[3] = new float[]{x, y1, z + 1};
+            }
+            case 4 -> { // +Z
+                v[0] = new float[]{x + 1, y0, z + 1};
+                v[1] = new float[]{x, y0, z + 1};
+                v[2] = new float[]{x, y1, z + 1};
+                v[3] = new float[]{x + 1, y1, z + 1};
+            }
+            case 5 -> { // -Z
+                v[0] = new float[]{x, y0, z};
+                v[1] = new float[]{x + 1, y0, z};
+                v[2] = new float[]{x + 1, y1, z};
+                v[3] = new float[]{x, y1, z};
+            }
+            default -> { return; }
+        }
+
+        float shade = (face == 0 || face == 1) ? 0.80f : 0.90f;
+        ColorRGBA c = type.color.clone();
+        c.r *= shade; c.g *= shade; c.b *= shade; c.a = 0.65f;
+
+        int base = positions.size() / 3;
+        for (int i = 0; i < 4; i++) {
+            positions.add(v[i][0]); positions.add(v[i][1]); positions.add(v[i][2]);
+            colors.add(c.r); colors.add(c.g); colors.add(c.b); colors.add(c.a);
+        }
+
+        int tileIndex = 7 + getWaterAnimFrame();
+        float[] uv = (ATLAS != null) ? ATLAS.getUV(tileIndex) : new float[]{0,0,1,1};
+        // Mapeamento vertical padrão
+        uvs.add(uv[0]); uvs.add(uv[1]);
+        uvs.add(uv[2]); uvs.add(uv[1]);
+        uvs.add(uv[2]); uvs.add(uv[3]);
+        uvs.add(uv[0]); uvs.add(uv[3]);
+
+        indices.add(base); indices.add(base + 1); indices.add(base + 2);
+        indices.add(base); indices.add(base + 2); indices.add(base + 3);
     }
 }

@@ -27,6 +27,7 @@ public class WaterSimulator {
     private float tickAccum = 0f;
     private final float tickInterval = 0.08f; // ~12.5 ticks/seg (ajustável)
     private final int perTickBudget = 64;     // máximo de células por tick (ajustável)
+    private final int MAX_SIDE_LEVEL = 4;     // alcance lateral máximo (1..7). Menor que 7 para não espalhar tanto
 
     public WaterSimulator(ChunkManager cm) {
         this.cm = cm;
@@ -82,11 +83,14 @@ public class WaterSimulator {
         }
 
         // 2) Lateral
-        int sideLevel;
-        if (level == 8) sideLevel = 1;
-        else if (level == 0) sideLevel = 1;
-        else if (level >= 7) sideLevel = -1; // não espalha
-        else sideLevel = level + 1;
+    int sideLevel;
+    if (level == 8) sideLevel = 1;
+    else if (level == 0) sideLevel = 1;
+    else if (level >= MAX_SIDE_LEVEL) sideLevel = -1; // não espalha além do limite
+    else sideLevel = level + 1;
+
+    // Se o nível calculado ultrapassa o limite, cancela espalhamento
+    if (sideLevel > MAX_SIDE_LEVEL) sideLevel = -1;
 
         if (sideLevel > 0) {
             trySpread(wx + 1, wy, wz, sideLevel);

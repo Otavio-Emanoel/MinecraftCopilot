@@ -16,14 +16,15 @@ public class ChunkManager {
     public static record ChunkCoord(int x, int z) {}
 
     private final Node worldNode;
-    private final Material chunkMaterial;
+    private final Material chunkMaterialSolid;
+    private final Material chunkMaterialWater;
     private final int seed;
     private final int viewRadius; // em chunks
 
     private static class LoadedChunk {
         final Chunk chunk;
-        Geometry geom;
-        LoadedChunk(Chunk c, Geometry g) { this.chunk = c; this.geom = g; }
+        Node geom; // nó com dois filhos: sólidos (Opaque) e água (Transparent)
+        LoadedChunk(Chunk c, Node g) { this.chunk = c; this.geom = g; }
     }
 
     private final Map<ChunkCoord, LoadedChunk> loaded = new HashMap<>();
@@ -34,9 +35,13 @@ public class ChunkManager {
     private final List<ChunkCoord> animKeys = new ArrayList<>();
     private int waterAnimCursor = 0;
 
-    public ChunkManager(Node worldNode, Material chunkMaterial, int seed, int viewRadius) {
+    public ChunkManager(Node worldNode, Material chunkMaterialSolid, int seed, int viewRadius) {
         this.worldNode = worldNode;
-        this.chunkMaterial = chunkMaterial;
+        this.chunkMaterialSolid = chunkMaterialSolid;
+        // Cria um material para água com alpha blend baseado no material sólido
+        this.chunkMaterialWater = chunkMaterialSolid.clone();
+        this.chunkMaterialWater.getAdditionalRenderState().setBlendMode(
+                com.jme3.material.RenderState.BlendMode.Alpha);
         this.seed = seed;
         this.viewRadius = Math.max(1, viewRadius);
     }
@@ -109,11 +114,18 @@ public class ChunkManager {
             ChunkCoord k = animKeys.get(waterAnimCursor++);
             LoadedChunk lc = loaded.get(k);
             if (lc != null) {
-                Geometry g = lc.chunk.buildGeometry(chunkMaterial);
-                g.setQueueBucket(RenderQueue.Bucket.Transparent);
+                Node n = lc.chunk.buildGeometryPair(chunkMaterialSolid, chunkMaterialWater);
+                // Configura buckets
+                for (Spatial s : n.getChildren()) {
+                    if (s.getName().contains("water")) {
+                        s.setQueueBucket(RenderQueue.Bucket.Transparent);
+                    } else {
+                        s.setQueueBucket(RenderQueue.Bucket.Opaque);
+                    }
+                }
                 lc.geom.removeFromParent();
-                worldNode.attachChild(g);
-                lc.geom = g;
+                worldNode.attachChild(n);
+                lc.geom = n;
             }
             animBudget--;
         }
@@ -123,8 +135,11 @@ public class ChunkManager {
         Chunk chunk = new Chunk(c.x, c.z);
         // Terreno procedural com morros usando seed
         chunk.generateTerrain(seed);
-    Geometry geom = chunk.buildGeometry(chunkMaterial);
-    geom.setQueueBucket(RenderQueue.Bucket.Transparent);
+        Node geom = chunk.buildGeometryPair(chunkMaterialSolid, chunkMaterialWater);
+        for (Spatial s : geom.getChildren()) {
+            if (s.getName().contains("water")) s.setQueueBucket(RenderQueue.Bucket.Transparent);
+            else s.setQueueBucket(RenderQueue.Bucket.Opaque);
+        }
         worldNode.attachChild(geom);
         loaded.put(c, new LoadedChunk(chunk, geom));
 
@@ -148,9 +163,11 @@ public class ChunkManager {
         if (wy < 0 || wy >= Chunk.HEIGHT || lx < 0 || lx >= Chunk.SIZE || lz < 0 || lz >= Chunk.SIZE) return false;
         lc.chunk.set(lx, wy, lz, type);
         // Reconstroi apenas este chunk
-        Geometry newGeom = lc.chunk.buildGeometry(chunkMaterial);
-        // Bucket transparente para permitir alpha nos vértices de água
-        newGeom.setQueueBucket(RenderQueue.Bucket.Transparent);
+        Node newGeom = lc.chunk.buildGeometryPair(chunkMaterialSolid, chunkMaterialWater);
+        for (Spatial s : newGeom.getChildren()) {
+            if (s.getName().contains("water")) s.setQueueBucket(RenderQueue.Bucket.Transparent);
+            else s.setQueueBucket(RenderQueue.Bucket.Opaque);
+        }
         lc.geom.removeFromParent();
         worldNode.attachChild(newGeom);
         lc.geom = newGeom;
@@ -166,8 +183,11 @@ public class ChunkManager {
     private void rebuildNeighbor(int ncx, int ncz) {
         LoadedChunk nlc = loaded.get(new ChunkCoord(ncx, ncz));
         if (nlc == null) return;
-    Geometry g = nlc.chunk.buildGeometry(chunkMaterial);
-    g.setQueueBucket(RenderQueue.Bucket.Transparent);
+        Node g = nlc.chunk.buildGeometryPair(chunkMaterialSolid, chunkMaterialWater);
+        for (Spatial s : g.getChildren()) {
+            if (s.getName().contains("water")) s.setQueueBucket(RenderQueue.Bucket.Transparent);
+            else s.setQueueBucket(RenderQueue.Bucket.Opaque);
+        }
         nlc.geom.removeFromParent();
         worldNode.attachChild(g);
         nlc.geom = g;
@@ -244,8 +264,11 @@ public class ChunkManager {
         lc.chunk.set(lx, wy, lz, type);
         lc.chunk.setMeta(lx, wy, lz, meta);
         // Rebuild local chunk mesh
-    Geometry newGeom = lc.chunk.buildGeometry(chunkMaterial);
-    newGeom.setQueueBucket(RenderQueue.Bucket.Transparent);
+        Node newGeom = lc.chunk.buildGeometryPair(chunkMaterialSolid, chunkMaterialWater);
+        for (Spatial s : newGeom.getChildren()) {
+            if (s.getName().contains("water")) s.setQueueBucket(RenderQueue.Bucket.Transparent);
+            else s.setQueueBucket(RenderQueue.Bucket.Opaque);
+        }
         lc.geom.removeFromParent();
         worldNode.attachChild(newGeom);
         lc.geom = newGeom;
