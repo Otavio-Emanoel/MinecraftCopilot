@@ -12,6 +12,7 @@ import com.jme3.scene.Node;
 import com.minecraftcopilot.world.ChunkManager;
 import com.minecraftcopilot.player.PlayerController;
 import com.minecraftcopilot.gfx.TextureAtlas;
+import com.minecraftcopilot.ui.HotbarState;
 import com.minecraftcopilot.Chunk;
 
 public class VoxelGameState extends BaseAppState {
@@ -23,6 +24,7 @@ public class VoxelGameState extends BaseAppState {
     private BitmapText crosshair;
     private BitmapFont font;
     private PlayerController player;
+    private HotbarState hotbar;
 
     @Override
     protected void initialize(Application application) {
@@ -65,6 +67,10 @@ public class VoxelGameState extends BaseAppState {
     player = new PlayerController();
     getStateManager().attach(player);
 
+    // Hotbar com 9 slots e item na mão
+    hotbar = new HotbarState(chunkMaterial);
+    getStateManager().attach(hotbar);
+
         // Mira (crosshair) central
         this.font = app.getAssetManager().loadFont("Interface/Fonts/Default.fnt");
         this.crosshair = new BitmapText(font);
@@ -87,6 +93,10 @@ public class VoxelGameState extends BaseAppState {
         if (crosshair != null) {
             crosshair.removeFromParent();
             crosshair = null;
+        }
+        if (hotbar != null) {
+            getStateManager().detach(hotbar);
+            hotbar = null;
         }
         if (app != null && app.getInputManager() != null) {
             app.getInputManager().setCursorVisible(true);
