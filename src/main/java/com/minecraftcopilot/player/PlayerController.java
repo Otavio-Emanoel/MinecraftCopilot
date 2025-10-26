@@ -46,6 +46,7 @@ public class PlayerController extends BaseAppState {
     private final ChunkManager chunkManager;
 
     private final ActionListener input = (name, isPressed, tpf) -> {
+        if (!isEnabled()) return; // ignora entradas quando desabilitado (ex.: inventário aberto)
         boolean val = isPressed;
         if (MAP_FORWARD.equals(name)) fwd = val;
         else if (MAP_BACK.equals(name)) back = val;
@@ -55,6 +56,7 @@ public class PlayerController extends BaseAppState {
     };
 
     private final AnalogListener mouse = (name, value, tpf) -> {
+        if (!isEnabled()) return; // evita mudar yaw/pitch enquanto inventário está aberto
         float delta = value * mouseSensitivity;
         if (LOOK_LEFT.equals(name)) {
             yaw += delta;
@@ -185,6 +187,8 @@ public class PlayerController extends BaseAppState {
         if (app != null && app.getInputManager() != null) {
             app.getInputManager().setCursorVisible(true);
         }
+        // Limpa estados de movimento para não "grudar" ao reativar
+        fwd = back = left = right = jump = false;
     }
 
     private void clampPitch() {
