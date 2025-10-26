@@ -206,9 +206,10 @@ public class HotbarState extends BaseAppState {
     public void update(float tpf) {
         // Posicionar o item na mão relativo à câmera (inferior direita da tela, um pouco à frente)
         var cam = app.getCamera();
-        Vector3f pos = cam.getLocation().add(cam.getDirection().mult(0.6f))
-                .add(cam.getLeft().mult(-0.35f))
-                .add(cam.getUp().mult(-0.35f));
+    // Posiciona no canto inferior direito (mais próximo e discreto)
+    Vector3f pos = cam.getLocation().add(cam.getDirection().mult(0.45f))
+        .add(cam.getLeft().mult(-0.45f))
+        .add(cam.getUp().mult(-0.35f));
         handNode.setLocalTranslation(pos);
         Quaternion rot = cam.getRotation().clone();
         Quaternion tilt = new Quaternion().fromAngles(-0.25f, 0.35f, 0.15f);

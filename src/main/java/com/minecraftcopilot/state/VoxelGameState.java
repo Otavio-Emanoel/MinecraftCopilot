@@ -36,13 +36,10 @@ public class VoxelGameState extends BaseAppState {
         // Cor do fundo "dia"
         app.getViewPort().setBackgroundColor(new ColorRGBA(0.6f, 0.8f, 1f, 1f));
 
-        // Habilitar câmera fly no jogo e capturar mouse
+        // Desabilitar FlyByCamera (usamos nosso controlador próprio)
         if (app.getFlyByCamera() != null) {
-            app.getFlyByCamera().setEnabled(true);
-            app.getFlyByCamera().setMoveSpeed(12f);
-            app.getFlyByCamera().setRotationSpeed(1.5f);
-            app.getFlyByCamera().setDragToRotate(false); // rotaciona sempre, sem precisar clicar
-            app.getFlyByCamera().setZoomSpeed(0f); // desabilita zoom por rolagem (estilo Minecraft)
+            app.getFlyByCamera().setEnabled(false);
+            app.getFlyByCamera().setZoomSpeed(0f);
         }
         if (app.getInputManager() != null) {
             app.getInputManager().setCursorVisible(false); // esconde e "gruda" o mouse na janela
@@ -64,9 +61,12 @@ public class VoxelGameState extends BaseAppState {
 
     app.getCamera().setLocation(new Vector3f(16, 30, 48));
     app.getCamera().lookAt(new Vector3f(16, 15, 16), Vector3f.UNIT_Y);
+    // FOV e planos de recorte explícitos para estabilidade (evita zoom acidental)
+    float aspect = (float) app.getCamera().getWidth() / (float) app.getCamera().getHeight();
+    app.getCamera().setFrustumPerspective(70f, aspect, 0.05f, 1000f);
 
-    // Jogador controlado sem Bullet (cinemático, com gravidade e pulo sobre chão plano)
-    player = new PlayerController();
+    // Jogador controlado sem Bullet com colisão voxel
+    player = new PlayerController(chunkManager);
     getStateManager().attach(player);
 
     // Hotbar com 9 slots e item na mão

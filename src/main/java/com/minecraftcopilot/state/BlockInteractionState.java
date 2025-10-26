@@ -36,6 +36,10 @@ public class BlockInteractionState extends BaseAppState {
     private boolean hasSelection = false;
     private Vector3f lastHitContact;
     private Vector3f lastRayDir;
+    // AABB do jogador (deve bater com PlayerController)
+    private static final float PC_HALF_WIDTH = 0.3f;
+    private static final float PC_EYE_HEIGHT = 1.90f;
+    private static final float PC_BODY_HEIGHT = 1.90f;
 
     private ActionListener action;
 
@@ -78,7 +82,10 @@ public class BlockInteractionState extends BaseAppState {
                             pwz += (d.z > 0 ? -1 : 1);
                         }
                     }
-                    chunkManager.setBlockAtWorld(pwx, pwy, pwz, toPlace);
+                    // Bloquear colocação que intersecta o jogador
+                    if (!wouldIntersectPlayer(pwx, pwy, pwz)) {
+                        chunkManager.setBlockAtWorld(pwx, pwy, pwz, toPlace);
+                    }
                 }
             }
         };
@@ -149,6 +156,25 @@ public class BlockInteractionState extends BaseAppState {
         outline = null;
         lastHitContact = null;
         lastRayDir = null;
+    }
+
+    private boolean wouldIntersectPlayer(int bx, int by, int bz) {
+        // AABB do bloco
+        float bMinX = bx, bMaxX = bx + 1f;
+        float bMinY = by, bMaxY = by + 1f;
+        float bMinZ = bz, bMaxZ = bz + 1f;
+        // AABB do jogador (a partir da câmera)
+        Vector3f camPos = app.getCamera().getLocation();
+        float pMinX = camPos.x - PC_HALF_WIDTH;
+        float pMaxX = camPos.x + PC_HALF_WIDTH;
+        float pMinY = camPos.y - PC_EYE_HEIGHT;
+        float pMaxY = pMinY + PC_BODY_HEIGHT;
+        float pMinZ = camPos.z - PC_HALF_WIDTH;
+        float pMaxZ = camPos.z + PC_HALF_WIDTH;
+        boolean overlapX = pMinX < bMaxX && pMaxX > bMinX;
+        boolean overlapY = pMinY < bMaxY && pMaxY > bMinY;
+        boolean overlapZ = pMinZ < bMaxZ && pMaxZ > bMinZ;
+        return overlapX && overlapY && overlapZ;
     }
 
     @Override

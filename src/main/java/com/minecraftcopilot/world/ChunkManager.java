@@ -118,6 +118,34 @@ public class ChunkManager {
         lc.geom.removeFromParent();
         worldNode.attachChild(newGeom);
         lc.geom = newGeom;
+
+        // Se o voxel alterado estiver na borda do chunk, reconstruir vizinhos para expor/ocultar faces adjacentes
+        if (lx == 0) rebuildNeighbor(cx - 1, cz);
+        if (lx == Chunk.SIZE - 1) rebuildNeighbor(cx + 1, cz);
+        if (lz == 0) rebuildNeighbor(cx, cz - 1);
+        if (lz == Chunk.SIZE - 1) rebuildNeighbor(cx, cz + 1);
         return true;
+    }
+
+    private void rebuildNeighbor(int ncx, int ncz) {
+        LoadedChunk nlc = loaded.get(new ChunkCoord(ncx, ncz));
+        if (nlc == null) return;
+        Geometry g = nlc.chunk.buildGeometry(chunkMaterial);
+        g.setQueueBucket(RenderQueue.Bucket.Opaque);
+        nlc.geom.removeFromParent();
+        worldNode.attachChild(g);
+        nlc.geom = g;
+    }
+
+    public boolean isSolidAtWorld(int wx, int wy, int wz) {
+        if (wy < 0 || wy >= Chunk.HEIGHT) return false;
+        int cx = worldToChunk(wx);
+        int cz = worldToChunk(wz);
+        LoadedChunk lc = loaded.get(new ChunkCoord(cx, cz));
+        if (lc == null) return false; // tratar não carregado como vazio
+        int lx = wx - cx * Chunk.SIZE;
+        int lz = wz - cz * Chunk.SIZE;
+        if (lx < 0 || lx >= Chunk.SIZE || lz < 0 || lz >= Chunk.SIZE) return false;
+        return lc.chunk.get(lx, wy, lz).isSolid();
     }
 }

@@ -12,6 +12,7 @@ import com.jme3.input.controls.MouseAxisTrigger;
 import com.jme3.math.FastMath;
 import com.jme3.math.Quaternion;
 import com.jme3.math.Vector3f;
+import com.minecraftcopilot.world.ChunkManager;
 
 public class PlayerController extends BaseAppState {
 
@@ -26,15 +27,15 @@ public class PlayerController extends BaseAppState {
     private static final String LOOK_DOWN = "PC_LookDown";
 
     private static final float EYE_HEIGHT = 1.90f; // altura dos olhos (personagem mais alto)
-    // Em geração plana, o topo do bloco está em (h + 1). Como usamos h=18, o topo é 19.
-    // Mantemos o valor do topo para que os "pés" fiquem exatamente acima da superfície.
-    private static final float GROUND_Y = 19.0f; // Y do topo do chão plano atual
+    private static final float BODY_HEIGHT = 1.90f; // altura do corpo (igual aos olhos para simplificar)
+    private static final float HALF_WIDTH = 0.3f;   // metade da largura (como MC ~0.6m)
     private static final float GRAVITY = 19.6f;  // m/s^2
     private static final float JUMP_SPEED = 6.8f;
     private static final float MOVE_SPEED = 5.0f;
+    private static final float EPS = 1e-4f;
 
     private SimpleApplication app;
-    private Vector3f position = new Vector3f(16, GROUND_Y + EYE_HEIGHT + 12f, 16);
+    private Vector3f position = new Vector3f(16, 30f, 16);
     private float vy = 0f;
     private boolean onGround = false;
 
@@ -42,6 +43,7 @@ public class PlayerController extends BaseAppState {
     private float yaw = 0f;   // rotação em torno de Y
     private float pitch = 0f; // rotação em torno de X (clamp)
     private float mouseSensitivity = 2.2f;
+    private final ChunkManager chunkManager;
 
     private final ActionListener input = (name, isPressed, tpf) -> {
         boolean val = isPressed;
@@ -66,7 +68,9 @@ public class PlayerController extends BaseAppState {
         clampPitch();
     };
 
-    public PlayerController() { }
+    public PlayerController(ChunkManager chunkManager) {
+        this.chunkManager = chunkManager;
+    }
 
     @Override
     protected void initialize(Application application) {
@@ -115,24 +119,29 @@ public class PlayerController extends BaseAppState {
         if (back) move.addLocal(camDir.negate());
         if (left) move.addLocal(camLeft);
         if (right) move.addLocal(camLeft.negate());
-        if (move.lengthSquared() > 0) {
-            move.normalizeLocal().multLocal(MOVE_SPEED * tpf);
-            position.addLocal(move);
-        }
+        if (move.lengthSquared() > 0) move.normalizeLocal().multLocal(MOVE_SPEED * tpf);
 
         // Gravidade simples
         vy -= GRAVITY * tpf;
-        position.y += vy * tpf;
 
-        float feetY = position.y - EYE_HEIGHT;
-        float ground = GROUND_Y; // futuro: consultar gerador/Chunk para altura real
-        if (feetY <= ground + 1e-4f) { // tolerância numérica
-            position.y = ground + EYE_HEIGHT;
-            vy = 0f;
-            onGround = true;
-        } else {
-            onGround = false;
+        // Colisão voxel: resolve eixos Y, depois X e Z
+        // 1) Y
+        float dy = vy * tpf;
+        onGround = false;
+        if (dy != 0) {
+            dy = resolveAxisY(dy);
         }
+        // 2) X
+        float dx = move.x;
+        if (dx != 0) {
+            dx = resolveAxisX(dx);
+        }
+        // 3) Z
+        float dz = move.z;
+        if (dz != 0) {
+            dz = resolveAxisZ(dz);
+        }
+        position.addLocal(dx, dy, dz);
 
         // Pulo
         if (jump && onGround) {
@@ -183,5 +192,119 @@ public class PlayerController extends BaseAppState {
         float limit = FastMath.DEG_TO_RAD * 89f;
         if (pitch > limit) pitch = limit;
         if (pitch < -limit) pitch = -limit;
+    }
+
+    private int floor(float v) { return (int) Math.floor(v); }
+
+    private boolean solidAt(float wx, float wy, float wz) {
+        if (chunkManager == null) return false;
+        return chunkManager.isSolidAtWorld(floor(wx), floor(wy), floor(wz));
+    }
+
+    private float resolveAxisY(float dy) {
+        float feetY = position.y - EYE_HEIGHT;
+        float newFeetY = feetY + dy;
+        float minX = position.x - HALF_WIDTH;
+        float maxX = position.x + HALF_WIDTH;
+        float minZ = position.z - HALF_WIDTH;
+        float maxZ = position.z + HALF_WIDTH;
+        if (dy > 0) {
+            // subindo: checar blocos no topo
+            float topY = newFeetY + BODY_HEIGHT;
+            int by = floor(topY);
+            for (int ix = floor(minX); ix <= floor(maxX - EPS); ix++) {
+                for (int iz = floor(minZ); iz <= floor(maxZ - EPS); iz++) {
+                    if (solidAt(ix, by, iz)) {
+                        // colide com o bloco: ajusta topo para a face inferior do bloco
+                        topY = by - EPS;
+                        newFeetY = topY - BODY_HEIGHT;
+                        vy = 0f;
+                        break;
+                    }
+                }
+            }
+        } else if (dy < 0) {
+            // descendo: checar blocos no pé
+            int by = floor(newFeetY);
+            for (int ix = floor(minX); ix <= floor(maxX - EPS); ix++) {
+                for (int iz = floor(minZ); iz <= floor(maxZ - EPS); iz++) {
+                    if (solidAt(ix, by, iz)) {
+                        // pisou no topo do bloco
+                        newFeetY = by + 1 + EPS;
+                        vy = 0f;
+                        onGround = true;
+                        break;
+                    }
+                }
+            }
+        }
+        // aplica
+        return newFeetY - feetY;
+    }
+
+    private float resolveAxisX(float dx) {
+        float minY = position.y - EYE_HEIGHT;
+        float maxY = minY + BODY_HEIGHT;
+        float minZ = position.z - HALF_WIDTH;
+        float maxZ = position.z + HALF_WIDTH;
+        if (dx > 0) {
+            float maxX = position.x + HALF_WIDTH + dx;
+            int bx = floor(maxX);
+            for (int by = floor(minY); by <= floor(maxY - EPS); by++) {
+                for (int bz = floor(minZ); bz <= floor(maxZ - EPS); bz++) {
+                    if (solidAt(bx, by, bz)) {
+                        maxX = bx - EPS;
+                        dx = maxX - (position.x + HALF_WIDTH);
+                        return dx;
+                    }
+                }
+            }
+        } else if (dx < 0) {
+            float minX = position.x - HALF_WIDTH + dx;
+            int bx = floor(minX);
+            for (int by = floor(minY); by <= floor(maxY - EPS); by++) {
+                for (int bz = floor(minZ); bz <= floor(maxZ - EPS); bz++) {
+                    if (solidAt(bx, by, bz)) {
+                        minX = bx + 1 + EPS;
+                        dx = minX - (position.x - HALF_WIDTH);
+                        return dx;
+                    }
+                }
+            }
+        }
+        return dx;
+    }
+
+    private float resolveAxisZ(float dz) {
+        float minY = position.y - EYE_HEIGHT;
+        float maxY = minY + BODY_HEIGHT;
+        float minX = position.x - HALF_WIDTH;
+        float maxX = position.x + HALF_WIDTH;
+        if (dz > 0) {
+            float maxZ = position.z + HALF_WIDTH + dz;
+            int bz = floor(maxZ);
+            for (int by = floor(minY); by <= floor(maxY - EPS); by++) {
+                for (int bx = floor(minX); bx <= floor(maxX - EPS); bx++) {
+                    if (solidAt(bx, by, bz)) {
+                        maxZ = bz - EPS;
+                        dz = maxZ - (position.z + HALF_WIDTH);
+                        return dz;
+                    }
+                }
+            }
+        } else if (dz < 0) {
+            float minZ = position.z - HALF_WIDTH + dz;
+            int bz = floor(minZ);
+            for (int by = floor(minY); by <= floor(maxY - EPS); by++) {
+                for (int bx = floor(minX); bx <= floor(maxX - EPS); bx++) {
+                    if (solidAt(bx, by, bz)) {
+                        minZ = bz + 1 + EPS;
+                        dz = minZ - (position.z - HALF_WIDTH);
+                        return dz;
+                    }
+                }
+            }
+        }
+        return dz;
     }
 }
