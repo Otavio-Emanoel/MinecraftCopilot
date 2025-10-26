@@ -40,9 +40,12 @@ public class VoxelGameState extends BaseAppState {
             app.getInputManager().setCursorVisible(false); // esconde e "gruda" o mouse na janela
         }
 
-        // Material com cores por vértice
-        this.chunkMaterial = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
-        this.chunkMaterial.setBoolean("VertexColor", true);
+    // Material com cores por vértice
+    this.chunkMaterial = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+    this.chunkMaterial.setBoolean("VertexColor", true);
+    // Para evitar buracos causados por orientação de triângulos, desativa face culling
+    this.chunkMaterial.getAdditionalRenderState().setFaceCullMode(
+        com.jme3.material.RenderState.FaceCullMode.Off);
 
     int seed = 1337;
         this.chunkManager = new ChunkManager(worldNode, chunkMaterial, seed, 6);
