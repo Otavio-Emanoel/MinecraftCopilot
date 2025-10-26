@@ -30,6 +30,12 @@ public class Chunk {
     }
 
     public static TextureAtlas ATLAS; // definido em VoxelGameState
+    // Animação simples da água: alterna entre 3 tiles (7,8,9)
+    private static volatile int WATER_ANIM_FRAME = 0; // 0..2
+    public static void setWaterAnimFrame(int frame) {
+        WATER_ANIM_FRAME = Math.max(0, Math.min(2, frame));
+    }
+    public static int getWaterAnimFrame() { return WATER_ANIM_FRAME; }
 
     private static int idx(int x, int y, int z) {
         return x + SIZE * (z + SIZE * y);
@@ -360,6 +366,10 @@ public class Chunk {
         }
         ColorRGBA c = type.color.clone();
         c.r *= shade; c.g *= shade; c.b *= shade;
+        // Água meio transparente
+        if (type == BlockType.WATER) {
+            c.a = 0.65f;
+        }
 
         int base = positions.size() / 3;
         for (int i = 0; i < 4; i++) {
@@ -372,8 +382,13 @@ public class Chunk {
             colors.add(c.a);
         }
 
-        // UVs usando atlas
-        float[] uv = (ATLAS != null) ? ATLAS.getUV(type.tileForFace(face)) : new float[]{0,0,1,1};
+        // UVs usando atlas (água usa frame animado)
+        int tileIndex = type.tileForFace(face);
+        if (type == BlockType.WATER) {
+            // base 7 + frame (0..2)
+            tileIndex = 7 + getWaterAnimFrame();
+        }
+        float[] uv = (ATLAS != null) ? ATLAS.getUV(tileIndex) : new float[]{0,0,1,1};
         // ordem consistente com os vértices v[0..3]
         // mapeamento retangular padrão
         uvs.add(uv[0]); uvs.add(uv[0] == uv[1] ? uv[1] : uv[1]); // dummy avoided; set below properly

@@ -32,7 +32,7 @@ public class TextureAtlas {
 
     private void buildDefaultTiles() {
         // Indices:
-        // 0 grass_top, 1 grass_side, 2 dirt, 3 stone, 4 log_side, 5 log_top, 6 leaves, 7 water
+        // 0 grass_top, 1 grass_side, 2 dirt, 3 stone, 4 log_side, 5 log_top, 6 leaves, 7 water_f0, 8 water_f1, 9 water_f2
         drawGrassTop(0);
         drawGrassSide(1);
         drawDirt(2);
@@ -40,7 +40,9 @@ public class TextureAtlas {
         drawLogSide(4);
         drawLogTop(5);
         drawLeaves(6);
-        drawWater(7);
+        drawWater(7, 0);
+        drawWater(8, 1);
+        drawWater(9, 2);
     }
 
     private void drawGrassTop(int idx) {
@@ -168,15 +170,17 @@ public class TextureAtlas {
         g.dispose();
     }
 
-    private void drawWater(int idx) {
+    private void drawWater(int idx, int phase) {
         Graphics2D g = atlas.createGraphics();
         int x = idx * tileSize;
         // azul com padrão ondulado simples
         g.setColor(new Color(40, 120, 220, 255));
         g.fillRect(x, 0, tileSize, tileSize);
-        g.setColor(new Color(90, 170, 255, 255));
+        g.setColor(new Color(90, 170, 255, 185));
+        int offset = (phase * Math.max(1, tileSize/8)) % Math.max(1, tileSize/4 + 1);
         for (int i = 0; i < tileSize; i += Math.max(1, tileSize/8)) {
-            g.drawArc(x - tileSize/2, i - tileSize/4, tileSize*2, tileSize/2, 0, 180);
+            int yy = i + offset;
+            g.drawArc(x - tileSize/2, yy - tileSize/4, tileSize*2, tileSize/2, 0, 180);
         }
         g.dispose();
     }

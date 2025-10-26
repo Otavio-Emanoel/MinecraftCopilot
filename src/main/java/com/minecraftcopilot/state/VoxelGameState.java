@@ -54,15 +54,18 @@ public class VoxelGameState extends BaseAppState {
         }
 
         // Material com textura (atlas) + vertex color para sombreamento simples
-        this.chunkMaterial = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
-        this.chunkMaterial.setBoolean("VertexColor", true);
-    // Aumenta quantidade de tiles para incluir tronco/folhas/água
-    TextureAtlas atlas = new TextureAtlas(16, 9);
+    this.chunkMaterial = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+    this.chunkMaterial.setBoolean("VertexColor", true);
+    // Aumenta quantidade de tiles para incluir tronco/folhas/água animada (3 frames)
+    TextureAtlas atlas = new TextureAtlas(16, 10);
         Chunk.ATLAS = atlas;
         this.chunkMaterial.setTexture("ColorMap", atlas.buildTexture(app.getAssetManager()));
         // Podemos manter culling Off por robustez no protótipo
         this.chunkMaterial.getAdditionalRenderState().setFaceCullMode(
                 com.jme3.material.RenderState.FaceCullMode.Off);
+    // Habilita transparência (usaremos alpha por vértice só na água)
+    this.chunkMaterial.getAdditionalRenderState().setBlendMode(
+        com.jme3.material.RenderState.BlendMode.Alpha);
 
         int seed = 1337;
         this.chunkManager = new ChunkManager(worldNode, chunkMaterial, seed, 6);
@@ -149,7 +152,7 @@ public class VoxelGameState extends BaseAppState {
     public void update(float tpf) {
         if (chunkManager != null) {
             // Gera até 4 chunks por frame para evitar travamento
-            chunkManager.update(app.getCamera().getLocation(), 4);
+            chunkManager.update(app.getCamera().getLocation(), tpf, 4);
         }
         centerCrosshair();
     }

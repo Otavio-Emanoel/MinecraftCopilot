@@ -28,6 +28,11 @@ public class ChunkManager {
 
     private final Map<ChunkCoord, LoadedChunk> loaded = new HashMap<>();
     private final WaterSimulator waterSim = new WaterSimulator(this);
+    // Animação simples da água e orçamento de rebuilds para atualizar UVs
+    private float waterAnimAccum = 0f;
+    private int waterAnimFrame = 0;
+    private final List<ChunkCoord> animKeys = new ArrayList<>();
+    private int waterAnimCursor = 0;
 
     public ChunkManager(Node worldNode, Material chunkMaterial, int seed, int viewRadius) {
         this.worldNode = worldNode;
@@ -56,7 +61,7 @@ public class ChunkManager {
         return needed;
     }
 
-    public void update(Vector3f camPos, int genBudgetPerFrame) {
+    public void update(Vector3f camPos, float tpf, int genBudgetPerFrame) {
         int ccx = worldToChunk(camPos.x);
         int ccz = worldToChunk(camPos.z);
 
@@ -84,15 +89,42 @@ public class ChunkManager {
             }
         }
 
-        // Passo da simulação de água por frame (orçamento modesto)
-        waterSim.step(256);
+    // Passo da simulação de água por frame em ticks discretos
+    waterSim.step(tpf);
+
+        // Avança animação da água e reconstrói gradualmente os chunks para aplicar novo frame de UV
+        waterAnimAccum += tpf;
+        if (waterAnimAccum >= 0.6f) {
+            waterAnimAccum = 0f;
+            waterAnimFrame = (waterAnimFrame + 1) % 3;
+            Chunk.setWaterAnimFrame(waterAnimFrame);
+            // Prepara a lista de chunks a atualizar UVs
+            animKeys.clear();
+            animKeys.addAll(loaded.keySet());
+            waterAnimCursor = 0;
+        }
+        // Rebuild orçamento pequeno por frame para aplicar o novo frame
+        int animBudget = 2;
+        while (animBudget > 0 && waterAnimCursor < animKeys.size()) {
+            ChunkCoord k = animKeys.get(waterAnimCursor++);
+            LoadedChunk lc = loaded.get(k);
+            if (lc != null) {
+                Geometry g = lc.chunk.buildGeometry(chunkMaterial);
+                g.setQueueBucket(RenderQueue.Bucket.Transparent);
+                lc.geom.removeFromParent();
+                worldNode.attachChild(g);
+                lc.geom = g;
+            }
+            animBudget--;
+        }
     }
 
     private void generateChunk(ChunkCoord c) {
         Chunk chunk = new Chunk(c.x, c.z);
         // Terreno procedural com morros usando seed
         chunk.generateTerrain(seed);
-        Geometry geom = chunk.buildGeometry(chunkMaterial);
+    Geometry geom = chunk.buildGeometry(chunkMaterial);
+    geom.setQueueBucket(RenderQueue.Bucket.Transparent);
         worldNode.attachChild(geom);
         loaded.put(c, new LoadedChunk(chunk, geom));
 
@@ -116,9 +148,9 @@ public class ChunkManager {
         if (wy < 0 || wy >= Chunk.HEIGHT || lx < 0 || lx >= Chunk.SIZE || lz < 0 || lz >= Chunk.SIZE) return false;
         lc.chunk.set(lx, wy, lz, type);
         // Reconstroi apenas este chunk
-    Geometry newGeom = lc.chunk.buildGeometry(chunkMaterial);
-    // Preserva a ordem/bucket
-    newGeom.setQueueBucket(RenderQueue.Bucket.Opaque);
+        Geometry newGeom = lc.chunk.buildGeometry(chunkMaterial);
+        // Bucket transparente para permitir alpha nos vértices de água
+        newGeom.setQueueBucket(RenderQueue.Bucket.Transparent);
         lc.geom.removeFromParent();
         worldNode.attachChild(newGeom);
         lc.geom = newGeom;
@@ -134,8 +166,8 @@ public class ChunkManager {
     private void rebuildNeighbor(int ncx, int ncz) {
         LoadedChunk nlc = loaded.get(new ChunkCoord(ncx, ncz));
         if (nlc == null) return;
-        Geometry g = nlc.chunk.buildGeometry(chunkMaterial);
-        g.setQueueBucket(RenderQueue.Bucket.Opaque);
+    Geometry g = nlc.chunk.buildGeometry(chunkMaterial);
+    g.setQueueBucket(RenderQueue.Bucket.Transparent);
         nlc.geom.removeFromParent();
         worldNode.attachChild(g);
         nlc.geom = g;
@@ -212,8 +244,8 @@ public class ChunkManager {
         lc.chunk.set(lx, wy, lz, type);
         lc.chunk.setMeta(lx, wy, lz, meta);
         // Rebuild local chunk mesh
-        Geometry newGeom = lc.chunk.buildGeometry(chunkMaterial);
-        newGeom.setQueueBucket(RenderQueue.Bucket.Opaque);
+    Geometry newGeom = lc.chunk.buildGeometry(chunkMaterial);
+    newGeom.setQueueBucket(RenderQueue.Bucket.Transparent);
         lc.geom.removeFromParent();
         worldNode.attachChild(newGeom);
         lc.geom = newGeom;
