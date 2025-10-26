@@ -58,6 +58,8 @@ public class HotbarState extends BaseAppState {
     // UI
     private Geometry highlight;
     private final List<BitmapText> labels = new ArrayList<>();
+    private final List<Geometry> slotBgs = new ArrayList<>();
+    private final List<Geometry> slotIcons = new ArrayList<>();
     private float slotSize = 48f;
     private float slotGap = 8f;
     private float barY = 20f;
@@ -72,6 +74,10 @@ public class HotbarState extends BaseAppState {
         for (int i = 0; i < slots.length; i++) slots[i] = null;
     }
 
+    public Material getBlockMaterial() {
+        return blockMaterial;
+    }
+
     public BlockType getSelectedBlock() {
         return slots[selected];
     }
@@ -82,6 +88,7 @@ public class HotbarState extends BaseAppState {
         if (index < 0 || index >= slots.length) return;
         slots[index] = type;
         updateLabelText(index);
+        updateSlotIcon(index);
         if (index == selected) rebuildHandItem();
     }
 
@@ -91,7 +98,7 @@ public class HotbarState extends BaseAppState {
         this.guiRoot = app.getGuiNode();
         this.font = app.getAssetManager().loadFont("Interface/Fonts/Default.fnt");
 
-        // Hotbar visual simples (texto + destaque)
+    // Hotbar com slots quadrados (BG) + ícone do bloco
         float totalW = 9 * slotSize + 8 * slotGap;
         float startX = (app.getCamera().getWidth() - totalW) / 2f;
 
@@ -106,15 +113,37 @@ public class HotbarState extends BaseAppState {
         guiRoot.attachChild(highlight);
 
         for (int i = 0; i < 9; i++) {
-            BitmapText t = new BitmapText(font);
-            String name = (slots[i] != null ? slots[i].name() : "-");
-            t.setText((i + 1) + "\n" + name);
-            t.setColor(i == selected ? ColorRGBA.White : new ColorRGBA(0.8f, 0.85f, 0.9f, 1f));
-            t.setSize(font.getCharSet().getRenderedSize() * 0.7f);
             float x = startX + i * (slotSize + slotGap);
-            t.setLocalTranslation(x + 10f, barY + slotSize - 8f, 0);
-            guiRoot.attachChild(t);
-            labels.add(t);
+
+            // BG do slot
+            Geometry bg = new Geometry("hb-bg-"+i, new Quad(slotSize, slotSize));
+            Material bgMat = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+            bgMat.setColor("Color", new ColorRGBA(0f, 0f, 0f, 0.35f));
+            bgMat.getAdditionalRenderState().setBlendMode(RenderState.BlendMode.Alpha);
+            bg.setMaterial(bgMat);
+            bg.setQueueBucket(RenderQueue.Bucket.Gui);
+            bg.setLocalTranslation(x, barY, 0);
+            guiRoot.attachChild(bg);
+            slotBgs.add(bg);
+
+            // Número pequeno do slot (1..9)
+            BitmapText num = new BitmapText(font);
+            num.setText(String.valueOf(i + 1));
+            num.setColor(new ColorRGBA(0.9f, 0.95f, 1f, 1f));
+            num.setSize(font.getCharSet().getRenderedSize() * 0.6f);
+            num.setLocalTranslation(x + 4f, barY + 12f, 0);
+            guiRoot.attachChild(num);
+            labels.add(num);
+
+            // Ícone do item (se houver)
+            Geometry icon = buildItemIcon(slots[i]);
+            if (icon != null) {
+                float pad = slotSize * 0.1f;
+                icon.setLocalTranslation(x + pad, barY + pad, 0);
+                icon.setLocalScale((slotSize - 2f * pad) / 1f);
+                guiRoot.attachChild(icon);
+            }
+            slotIcons.add(icon);
         }
         updateHighlightPosition();
 
@@ -178,18 +207,26 @@ public class HotbarState extends BaseAppState {
         rebuildHandItem();
     }
 
-    private void updateLabelsColor() {
-        for (int i = 0; i < labels.size(); i++) {
-            labels.get(i).setColor(i == selected ? ColorRGBA.White : new ColorRGBA(0.8f, 0.85f, 0.9f, 1f));
+    private void updateSlotIcon(int i) {
+        if (i < 0 || i >= slotIcons.size()) return;
+        Geometry old = slotIcons.get(i);
+        if (old != null) old.removeFromParent();
+        Geometry icon = buildItemIcon(slots[i]);
+        slotIcons.set(i, icon);
+        if (icon != null) {
+            float totalW = 9 * slotSize + 8 * slotGap;
+            float startX = (app.getCamera().getWidth() - totalW) / 2f;
+            float x = startX + i * (slotSize + slotGap);
+            float pad = slotSize * 0.1f;
+            icon.setLocalTranslation(x + pad, barY + pad, 0);
+            icon.setLocalScale((slotSize - 2f * pad) / 1f);
+            guiRoot.attachChild(icon);
         }
     }
 
-    private void updateLabelText(int index) {
-        if (index < 0 || index >= labels.size()) return;
-        BitmapText t = labels.get(index);
-        String name = (slots[index] != null ? slots[index].name() : "-");
-        t.setText((index + 1) + "\n" + name);
-    }
+    private void updateLabelsColor() { /* os números permanecem claros sempre */ }
+
+    private void updateLabelText(int index) { /* sem nomes agora */ }
 
     private void updateHighlightPosition() {
         float totalW = 9 * slotSize + 8 * slotGap;
@@ -208,6 +245,31 @@ public class HotbarState extends BaseAppState {
         handGeom = buildBlockGeometry(t, blockMaterial);
         handGeom.setLocalScale(0.28f);
         handNode.attachChild(handGeom);
+    }
+
+    private Geometry buildItemIcon(BlockType type) {
+        if (type == null || type == BlockType.AIR) return null;
+        // Quad 1x1 com UVs do tile (usaremos face +Y como ícone)
+        float[] uv = (Chunk.ATLAS != null) ? Chunk.ATLAS.getUV(type.tileForFace(2)) : new float[]{0,0,1,1};
+
+        Mesh mesh = new Mesh();
+        FloatBuffer pb = BufferUtils.createFloatBuffer(new float[]{0,0,0,  1,0,0,  1,1,0,  0,1,0});
+        FloatBuffer tb = BufferUtils.createFloatBuffer(new float[]{uv[0],uv[1],  uv[2],uv[1],  uv[2],uv[3],  uv[0],uv[3]});
+        IntBuffer ib = BufferUtils.createIntBuffer(new int[]{0,1,2, 0,2,3});
+        mesh.setBuffer(VertexBuffer.Type.Position, 3, pb);
+        mesh.setBuffer(VertexBuffer.Type.TexCoord, 2, tb);
+        mesh.setBuffer(VertexBuffer.Type.Index, 3, ib);
+        mesh.updateBound();
+
+        Geometry g = new Geometry("hb-icon", mesh);
+        Material m = blockMaterial.clone();
+        // Ícone 2D não usa VertexColor; evita azul quando não há buffer de cor
+        if (m.getParam("VertexColor") != null) m.setBoolean("VertexColor", false);
+        m.getAdditionalRenderState().setBlendMode(RenderState.BlendMode.Alpha);
+        m.getAdditionalRenderState().setDepthTest(false);
+        g.setMaterial(m);
+        g.setQueueBucket(RenderQueue.Bucket.Gui);
+        return g;
     }
 
     @Override
@@ -246,6 +308,10 @@ public class HotbarState extends BaseAppState {
         if (highlight != null) highlight.removeFromParent();
         for (var t : labels) t.removeFromParent();
         labels.clear();
+        for (var bg : slotBgs) if (bg != null) bg.removeFromParent();
+        slotBgs.clear();
+        for (var ic : slotIcons) if (ic != null) ic.removeFromParent();
+        slotIcons.clear();
         if (handNode != null) {
             handNode.removeFromParent();
             handNode.detachAllChildren();

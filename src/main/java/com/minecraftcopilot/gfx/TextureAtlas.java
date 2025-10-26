@@ -15,6 +15,8 @@ public class TextureAtlas {
     private final int width;
     private final int height;
     private final BufferedImage atlas;
+    private final float uvInsetU;
+    private final float uvInsetV;
 
     public TextureAtlas(int tileSize, int tiles) {
         this.tileSize = tileSize;
@@ -22,6 +24,9 @@ public class TextureAtlas {
         this.width = tileSize * tiles;
         this.height = tileSize; // todos numa linha
         this.atlas = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        // inset de meia célula de pixel para evitar bleeding entre tiles
+        this.uvInsetU = 0.5f / (float) width;
+        this.uvInsetV = 0.5f / (float) height;
         buildDefaultTiles();
     }
 
@@ -105,10 +110,10 @@ public class TextureAtlas {
     }
 
     public float[] getUV(int tileIndex) {
-        float u0 = (tileIndex * tileSize) / (float) width;
-        float v0 = 0f;
-        float u1 = ((tileIndex + 1) * tileSize) / (float) width;
-        float v1 = 1f;
+        float u0 = (tileIndex * tileSize) / (float) width + uvInsetU;
+        float v0 = 0f + uvInsetV;
+        float u1 = ((tileIndex + 1) * tileSize) / (float) width - uvInsetU;
+        float v1 = 1f - uvInsetV;
         return new float[]{u0, v0, u1, v1};
     }
 
@@ -116,6 +121,7 @@ public class TextureAtlas {
         AWTLoader loader = new AWTLoader();
         Image img = loader.load(atlas, true);
         Texture2D tex = new Texture2D(img);
+        // Visual pixelado e estável (sem mipmaps) para estilo voxel
         tex.setMagFilter(Texture2D.MagFilter.Nearest);
         tex.setMinFilter(Texture2D.MinFilter.NearestNoMipMaps);
         return tex;
