@@ -19,6 +19,7 @@ import com.jme3.scene.debug.WireBox;
 import com.minecraftcopilot.BlockType;
 import com.minecraftcopilot.Chunk;
 import com.minecraftcopilot.world.ChunkManager;
+import com.minecraftcopilot.ui.HotbarState;
 
 public class BlockInteractionState extends BaseAppState {
 
@@ -27,23 +28,28 @@ public class BlockInteractionState extends BaseAppState {
     private SimpleApplication app;
     private final Node worldNode;
     private final ChunkManager chunkManager;
+    private final HotbarState hotbar;
 
     // highlight
     private Geometry outline;
     private int selWx, selWy, selWz;
     private boolean hasSelection = false;
+    private Vector3f lastHitContact;
+    private Vector3f lastRayDir;
 
     private ActionListener action;
 
-    public BlockInteractionState(Node worldNode, ChunkManager chunkManager) {
+    public BlockInteractionState(Node worldNode, ChunkManager chunkManager, HotbarState hotbar) {
         this.worldNode = worldNode;
         this.chunkManager = chunkManager;
+        this.hotbar = hotbar;
     }
 
     @Override
     protected void initialize(Application application) {
         this.app = (SimpleApplication) application;
         app.getInputManager().addMapping(MAP_BREAK, new MouseButtonTrigger(MouseInput.BUTTON_LEFT));
+        app.getInputManager().addMapping("BI_Place", new MouseButtonTrigger(MouseInput.BUTTON_RIGHT));
         // Define o listener agora que a instância já foi construída (chunkManager está pronto)
         this.action = (name, isPressed, tpf) -> {
             if (!isPressed) return;
@@ -54,9 +60,29 @@ public class BlockInteractionState extends BaseAppState {
                 hasSelection = false;
                 if (outline != null) outline.removeFromParent();
                 outline = null;
+            } else if ("BI_Place".equals(name) && hasSelection && hotbar != null) {
+                BlockType toPlace = hotbar.getSelectedBlock();
+                if (toPlace != null && toPlace != BlockType.AIR && lastHitContact != null && lastRayDir != null) {
+                    Vector3f outside = lastHitContact.subtract(lastRayDir.mult(1e-3f));
+                    int pwx = (int) Math.floor(outside.x);
+                    int pwy = (int) Math.floor(outside.y);
+                    int pwz = (int) Math.floor(outside.z);
+                    // Se por algum motivo cair no mesmo bloco selecionado, empurra um passo no eixo dominante da direção
+                    if (pwx == selWx && pwy == selWy && pwz == selWz) {
+                        Vector3f d = lastRayDir;
+                        if (Math.abs(d.x) >= Math.abs(d.y) && Math.abs(d.x) >= Math.abs(d.z)) {
+                            pwx += (d.x > 0 ? -1 : 1);
+                        } else if (Math.abs(d.y) >= Math.abs(d.x) && Math.abs(d.y) >= Math.abs(d.z)) {
+                            pwy += (d.y > 0 ? -1 : 1);
+                        } else {
+                            pwz += (d.z > 0 ? -1 : 1);
+                        }
+                    }
+                    chunkManager.setBlockAtWorld(pwx, pwy, pwz, toPlace);
+                }
             }
         };
-        app.getInputManager().addListener(action, MAP_BREAK);
+        app.getInputManager().addListener(action, MAP_BREAK, "BI_Place");
     }
 
     @Override
@@ -99,6 +125,8 @@ public class BlockInteractionState extends BaseAppState {
         int wz = (int) (chunkOrigin.z + lz);
 
         setSelection(wx, wy, wz);
+        lastHitContact = contact;
+        lastRayDir = dir;
     }
 
     private void setSelection(int wx, int wy, int wz) {
@@ -119,12 +147,15 @@ public class BlockInteractionState extends BaseAppState {
         hasSelection = false;
         if (outline != null) outline.removeFromParent();
         outline = null;
+        lastHitContact = null;
+        lastRayDir = null;
     }
 
     @Override
     protected void cleanup(Application application) {
         if (app != null && app.getInputManager() != null) {
             if (app.getInputManager().hasMapping(MAP_BREAK)) app.getInputManager().deleteMapping(MAP_BREAK);
+            if (app.getInputManager().hasMapping("BI_Place")) app.getInputManager().deleteMapping("BI_Place");
             app.getInputManager().removeListener(action);
         }
         clearSelection();

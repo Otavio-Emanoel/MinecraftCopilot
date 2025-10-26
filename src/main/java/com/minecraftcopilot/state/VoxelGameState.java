@@ -73,8 +73,8 @@ public class VoxelGameState extends BaseAppState {
     hotbar = new HotbarState(chunkMaterial);
     getStateManager().attach(hotbar);
 
-    // Interação com blocos: contorno + destruir com clique esquerdo
-    blockInteraction = new BlockInteractionState(worldNode, chunkManager);
+    // Interação com blocos: contorno + destruir com clique esquerdo + colocar com direito
+    blockInteraction = new BlockInteractionState(worldNode, chunkManager, hotbar);
     getStateManager().attach(blockInteraction);
 
         // Mira (crosshair) central
