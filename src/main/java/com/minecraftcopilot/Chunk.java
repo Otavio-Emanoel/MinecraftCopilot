@@ -7,6 +7,7 @@ import com.jme3.scene.Geometry;
 import com.jme3.scene.Mesh;
 import com.jme3.scene.VertexBuffer;
 import com.jme3.util.BufferUtils;
+import com.minecraftcopilot.gfx.TextureAtlas;
 
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
@@ -25,6 +26,8 @@ public class Chunk {
         this.cz = cz;
         this.blocks = new byte[SIZE * SIZE * HEIGHT];
     }
+
+    public static TextureAtlas ATLAS; // definido em VoxelGameState
 
     private static int idx(int x, int y, int z) {
         return x + SIZE * (z + SIZE * y);
@@ -80,9 +83,10 @@ public class Chunk {
     }
 
     public Geometry buildGeometry(Material mat) {
-        List<Float> positions = new ArrayList<>();
-        List<Float> colors = new ArrayList<>();
-        List<Integer> indices = new ArrayList<>();
+    List<Float> positions = new ArrayList<>();
+    List<Float> colors = new ArrayList<>();
+    List<Float> uvs = new ArrayList<>();
+    List<Integer> indices = new ArrayList<>();
 
         // Direções: +X, -X, +Y, -Y, +Z, -Z
         final int[][] DIRS = {
@@ -103,7 +107,7 @@ public class Chunk {
                         int nz = z + DIRS[f][2];
                         BlockType n = get(nx, ny, nz);
                         if (n.isSolid()) continue; // face interna
-                        addFace(positions, colors, indices, x, y, z, f, t);
+                        addFace(positions, colors, uvs, indices, x, y, z, f, t);
                     }
                 }
             }
@@ -119,12 +123,17 @@ public class Chunk {
     for (Float f : colors) colBuf.put(f);
     colBuf.flip();
 
+    FloatBuffer uvBuf = BufferUtils.createFloatBuffer(uvs.size());
+    for (Float f : uvs) uvBuf.put(f);
+    uvBuf.flip();
+
     IntBuffer idxBuf = BufferUtils.createIntBuffer(indices.size());
     for (Integer v : indices) idxBuf.put(v);
     idxBuf.flip();
 
     mesh.setBuffer(VertexBuffer.Type.Position, 3, posBuf);
     mesh.setBuffer(VertexBuffer.Type.Color, 4, colBuf);
+    mesh.setBuffer(VertexBuffer.Type.TexCoord, 2, uvBuf);
     mesh.setBuffer(VertexBuffer.Type.Index, 3, idxBuf);
         mesh.updateBound();
 
@@ -134,7 +143,7 @@ public class Chunk {
         return geom;
     }
 
-    private static void addFace(List<Float> positions, List<Float> colors, List<Integer> indices,
+    private static void addFace(List<Float> positions, List<Float> colors, List<Float> uvs, List<Integer> indices,
                                 int x, int y, int z, int face, BlockType type) {
         // Define vértices da face com base no eixo
         float[][] v = new float[4][3];
@@ -202,6 +211,29 @@ public class Chunk {
             colors.add(c.g);
             colors.add(c.b);
             colors.add(c.a);
+        }
+
+        // UVs usando atlas
+        float[] uv = (ATLAS != null) ? ATLAS.getUV(type.tileForFace(face)) : new float[]{0,0,1,1};
+        // ordem consistente com os vértices v[0..3]
+        // mapeamento retangular padrão
+        uvs.add(uv[0]); uvs.add(uv[0] == uv[1] ? uv[1] : uv[1]); // dummy avoided; set below properly
+        // Para clareza, definimos diretamente por face
+        uvs.remove(uvs.size()-1); uvs.remove(uvs.size()-1);
+        switch (face) {
+            case 0,1,4,5 -> { // faces verticais: u ao longo de X/Z, v ao longo de Y
+                // v[0],v[1],v[2],v[3]
+                uvs.add(uv[0]); uvs.add(uv[1]); // 0
+                uvs.add(uv[2]); uvs.add(uv[1]); // 1
+                uvs.add(uv[2]); uvs.add(uv[3]); // 2
+                uvs.add(uv[0]); uvs.add(uv[3]); // 3
+            }
+            case 2,3 -> { // topo/baixo: u->x, v->z
+                uvs.add(uv[0]); uvs.add(uv[1]);
+                uvs.add(uv[2]); uvs.add(uv[1]);
+                uvs.add(uv[2]); uvs.add(uv[3]);
+                uvs.add(uv[0]); uvs.add(uv[3]);
+            }
         }
 
         // Triângulos (CCW)

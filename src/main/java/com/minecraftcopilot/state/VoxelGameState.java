@@ -11,6 +11,8 @@ import com.jme3.math.Vector3f;
 import com.jme3.scene.Node;
 import com.minecraftcopilot.world.ChunkManager;
 import com.minecraftcopilot.player.PlayerController;
+import com.minecraftcopilot.gfx.TextureAtlas;
+import com.minecraftcopilot.Chunk;
 
 public class VoxelGameState extends BaseAppState {
 
@@ -42,10 +44,13 @@ public class VoxelGameState extends BaseAppState {
             app.getInputManager().setCursorVisible(false); // esconde e "gruda" o mouse na janela
         }
 
-    // Material com cores por vértice
+    // Material com textura (atlas) + vertex color para sombreamento simples
     this.chunkMaterial = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
     this.chunkMaterial.setBoolean("VertexColor", true);
-    // Para evitar buracos causados por orientação de triângulos, desativa face culling
+    TextureAtlas atlas = new TextureAtlas(16, 4);
+    Chunk.ATLAS = atlas;
+    this.chunkMaterial.setTexture("ColorMap", atlas.buildTexture(app.getAssetManager()));
+    // Podemos manter culling Off por robustez no protótipo
     this.chunkMaterial.getAdditionalRenderState().setFaceCullMode(
         com.jme3.material.RenderState.FaceCullMode.Off);
 
