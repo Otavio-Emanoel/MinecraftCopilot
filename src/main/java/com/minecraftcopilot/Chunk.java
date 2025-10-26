@@ -20,11 +20,13 @@ public class Chunk {
 
     private final int cx, cz; // coordenadas do chunk no mundo
     private final byte[] blocks; // [x + SIZE * (z + SIZE * y)]
+    private final byte[] meta;   // metadados por bloco (ex.: nível da água 0..7)
 
     public Chunk(int cx, int cz) {
         this.cx = cx;
         this.cz = cz;
         this.blocks = new byte[SIZE * SIZE * HEIGHT];
+        this.meta = new byte[SIZE * SIZE * HEIGHT];
     }
 
     public static TextureAtlas ATLAS; // definido em VoxelGameState
@@ -43,6 +45,16 @@ public class Chunk {
         blocks[idx(x, y, z)] = type.id;
     }
 
+    public byte getMeta(int x, int y, int z) {
+        if (x < 0 || x >= SIZE || y < 0 || y >= HEIGHT || z < 0 || z >= SIZE) return 0;
+        return meta[idx(x, y, z)];
+    }
+
+    public void setMeta(int x, int y, int z, int value) {
+        if (x < 0 || x >= SIZE || y < 0 || y >= HEIGHT || z < 0 || z >= SIZE) return;
+        meta[idx(x, y, z)] = (byte) Math.max(0, Math.min(127, value));
+    }
+
     public void generateTerrain(int seed) {
         // Parâmetros de terreno
         final float baseScale = 0.06f; // frequência base (maior -> mais suave)
@@ -57,6 +69,7 @@ public class Chunk {
         final float ridgeScale = 0.04f;
         final float ridgeAmp = 6.0f;
 
+        int[][] heightMap = new int[SIZE][SIZE];
         for (int x = 0; x < SIZE; x++) {
             for (int z = 0; z < SIZE; z++) {
                 float wx = (cx * SIZE + x);
@@ -77,6 +90,7 @@ public class Chunk {
                 int h = Math.round(heightF);
                 if (h < 1) h = 1;
                 if (h >= HEIGHT) h = HEIGHT - 1;
+                heightMap[x][z] = h;
 
                 // Materiais: topo grama, subsuperfície dirt, abaixo stone
                 // Se muito alto, chance de topo rochoso (sem grama)
@@ -92,6 +106,121 @@ public class Chunk {
                         type = BlockType.STONE;
                     }
                     set(x, y, z, type);
+                }
+            }
+        }
+
+        // Preencher água em depressões até um nível (lagos/"mar")
+        final int WATER_LEVEL = baseHeight - 2; // nível d'água global simples
+        for (int x = 0; x < SIZE; x++) {
+            for (int z = 0; z < SIZE; z++) {
+                int h = heightMap[x][z];
+                if (h + 1 <= WATER_LEVEL) {
+                    for (int y = h + 1; y <= Math.min(WATER_LEVEL, HEIGHT - 1); y++) {
+                        set(x, y, z, BlockType.WATER);
+                        setMeta(x, y, z, 0); // fonte estática
+                    }
+                }
+            }
+        }
+
+        // Colocar árvores em alguns topos de grama (evitando água acima)
+        placeTrees(seed, heightMap);
+    }
+
+    private void placeTrees(int seed, int[][] heightMap) {
+        int trees = 0;
+        for (int x = 0; x < SIZE; x++) {
+            for (int z = 0; z < SIZE; z++) {
+                int h = heightMap[x][z];
+                if (h <= 1 || h >= HEIGHT - 8) continue; // espaço mínimo para árvore
+                // precisa ser GRASS ou STONE no topo (permite pinheiros em áreas rochosas) e sem água acima
+                BlockType top = get(x, h, z);
+                if (top != BlockType.GRASS && top != BlockType.STONE) continue;
+                if (h + 1 < HEIGHT && get(x, h + 1, z) == BlockType.WATER) continue;
+
+                float wx = (cx * SIZE + x);
+                float wz = (cz * SIZE + z);
+                // probabilidade agrupada por ruído
+                float prob = Noise2D.noise(wx * 0.08f, wz * 0.08f, seed + 3001);
+                if (prob < 0.65f) continue; // ~35% em áreas favorecidas pelo ruído
+
+                // Variação de tamanho da árvore
+                float sizeN = Noise2D.noise(wx * 0.21f, wz * 0.21f, seed + 901); // 0..1
+                int trunkH = 4 + (int) Math.floor(sizeN * 5.0f); // 4..9
+                // conífera ocasional: mais alta e copa mais estreita
+                boolean tallNarrow = Noise2D.noise(wx * 0.09f, wz * 0.09f, seed + 1618) > 0.7f;
+                int r = (tallNarrow ? 2 : 2 + (int) Math.floor(Noise2D.noise(wx * 0.17f, wz * 0.17f, seed + 2718) * 2.5f)); // 2..3 (às vezes 4)
+                r = Math.min(r, 3);
+
+                // Permite árvores próximas à borda do chunk; copas serão "recortadas" nos limites
+
+                // tronco
+                for (int i = 1; i <= trunkH; i++) {
+                    if (h + i >= HEIGHT) break;
+                    set(x, h + i, z, BlockType.WOOD);
+                }
+                int topY = Math.min(HEIGHT - 1, h + trunkH);
+
+                // copa: volume arredondado com possível alongamento vertical
+                int yStretch = tallNarrow ? 2 : 1;
+                for (int dx = -r; dx <= r; dx++) {
+                    for (int dz = -r; dz <= r; dz++) {
+                        for (int dy = -r; dy <= r + (tallNarrow ? 1 : 0); dy++) {
+                            int xx = x + dx;
+                            int yy = topY + dy;
+                            int zz = z + dz;
+                            if (yy < 0 || yy >= HEIGHT) continue;
+                            if (xx < 0 || xx >= SIZE || zz < 0 || zz >= SIZE) continue;
+                            // distância elipsoidal
+                            float ndx = dx / (float) r;
+                            float ndz = dz / (float) r;
+                            float ndy = dy / (float) (r / (float) yStretch + 0.0001f);
+                            float d2 = ndx * ndx + ndz * ndz + ndy * ndy;
+                            if (d2 <= 1.0f) {
+                                BlockType cur = get(xx, yy, zz);
+                                if (cur == BlockType.AIR || cur == BlockType.GRASS) {
+                                    set(xx, yy, zz, BlockType.LEAVES);
+                                }
+                            }
+                        }
+                    }
+                }
+                // folha extra no topo para "finalizar" o formato
+                if (topY + 1 < HEIGHT) set(x, topY + 1, z, BlockType.LEAVES);
+                trees++;
+            }
+        }
+        // Fallback: se nenhum árvore foi plantada no chunk, planta uma próxima do centro (se possível)
+        if (trees == 0) {
+            int cxm = SIZE / 2;
+            int czm = SIZE / 2;
+            int h = heightMap[cxm][czm];
+            if (h > 1 && h < HEIGHT - 8) {
+                BlockType top = get(cxm, h, czm);
+                if (top == BlockType.GRASS || top == BlockType.STONE) {
+                    int trunkH = 6; // altura mediana
+                    int r = 2;
+                    // tronco
+                    for (int i = 1; i <= trunkH && h + i < HEIGHT; i++) {
+                        set(cxm, h + i, czm, BlockType.WOOD);
+                    }
+                    int topY = Math.min(HEIGHT - 1, h + trunkH);
+                    for (int dx = -r; dx <= r; dx++) {
+                        for (int dz = -r; dz <= r; dz++) {
+                            for (int dy = -r; dy <= r; dy++) {
+                                int xx = cxm + dx;
+                                int yy = topY + dy;
+                                int zz = czm + dz;
+                                if (yy < 0 || yy >= HEIGHT || xx < 0 || xx >= SIZE || zz < 0 || zz >= SIZE) continue;
+                                float d2 = (dx*dx + dz*dz + dy*dy);
+                                if (d2 <= (r*r + 1)) {
+                                    BlockType cur = get(xx, yy, zz);
+                                    if (cur == BlockType.AIR || cur == BlockType.GRASS) set(xx, yy, zz, BlockType.LEAVES);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

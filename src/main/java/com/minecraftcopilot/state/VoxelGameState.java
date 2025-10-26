@@ -56,7 +56,8 @@ public class VoxelGameState extends BaseAppState {
         // Material com textura (atlas) + vertex color para sombreamento simples
         this.chunkMaterial = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
         this.chunkMaterial.setBoolean("VertexColor", true);
-        TextureAtlas atlas = new TextureAtlas(16, 4);
+    // Aumenta quantidade de tiles para incluir tronco/folhas/água
+    TextureAtlas atlas = new TextureAtlas(16, 9);
         Chunk.ATLAS = atlas;
         this.chunkMaterial.setTexture("ColorMap", atlas.buildTexture(app.getAssetManager()));
         // Podemos manter culling Off por robustez no protótipo

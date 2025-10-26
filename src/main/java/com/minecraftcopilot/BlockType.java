@@ -7,7 +7,10 @@ public enum BlockType {
     // tileTop, tileSide, tileBottom (índices no atlas)
     GRASS(1, new ColorRGBA(0.36f, 0.6f, 0.2f, 1f), 0, 1, 2),
     DIRT(2, new ColorRGBA(0.45f, 0.30f, 0.15f, 1f), 2, 2, 2),
-    STONE(3, new ColorRGBA(0.62f, 0.62f, 0.62f, 1f), 3, 3, 3);
+    STONE(3, new ColorRGBA(0.62f, 0.62f, 0.62f, 1f), 3, 3, 3),
+    WOOD(4, new ColorRGBA(0.50f, 0.38f, 0.25f, 1f), 5, 4, 5),
+    LEAVES(5, new ColorRGBA(0.30f, 0.55f, 0.25f, 1f), 6, 6, 6),
+    WATER(6, new ColorRGBA(0.2f, 0.5f, 1.0f, 1f), 7, 7, 7);
 
     public final byte id;
     public final ColorRGBA color;
@@ -25,6 +28,11 @@ public enum BlockType {
 
     public boolean isSolid() {
         return this != AIR;
+    }
+
+    // Colisão física (player): água não bloqueia
+    public boolean isBlocking() {
+        return this != AIR && this != WATER;
     }
 
     public int tileForFace(int face) {

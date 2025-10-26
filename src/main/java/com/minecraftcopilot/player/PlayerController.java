@@ -277,7 +277,7 @@ public class PlayerController extends BaseAppState {
 
     private boolean solidAt(float wx, float wy, float wz) {
         if (chunkManager == null) return false;
-        return chunkManager.isSolidAtWorld(floor(wx), floor(wy), floor(wz));
+        return chunkManager.isBlockingAtWorld(floor(wx), floor(wy), floor(wz));
     }
 
     private float resolveAxisY(float dy) {

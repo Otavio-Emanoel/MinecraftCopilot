@@ -60,6 +60,11 @@ public class BlockInteractionState extends BaseAppState {
             if (MAP_BREAK.equals(name) && hasSelection) {
                 // Quebrar o bloco selecionado
                 chunkManager.setBlockAtWorld(selWx, selWy, selWz, BlockType.AIR);
+                // Notifica água ao redor para reagir
+                for (int dx = -1; dx <= 1; dx++)
+                    for (int dy = -1; dy <= 1; dy++)
+                        for (int dz = -1; dz <= 1; dz++)
+                            chunkManager.enqueueWaterUpdate(selWx + dx, selWy + dy, selWz + dz);
                 // Após quebrar, força re-avaliar a seleção no próximo update
                 hasSelection = false;
                 if (outline != null) outline.removeFromParent();
@@ -86,7 +91,18 @@ public class BlockInteractionState extends BaseAppState {
                     }
                     // Bloquear colocação que intersecta o jogador
                     if (!wouldIntersectPlayer(pwx, pwy, pwz)) {
-                        chunkManager.setBlockAtWorld(pwx, pwy, pwz, toPlace);
+                        if (toPlace == BlockType.WATER) {
+                            // Fonte de água meta=0
+                            chunkManager.setBlockAndMetaAtWorld(pwx, pwy, pwz, BlockType.WATER, 0);
+                            chunkManager.enqueueWaterUpdate(pwx, pwy, pwz);
+                        } else {
+                            chunkManager.setBlockAtWorld(pwx, pwy, pwz, toPlace);
+                            // Água ao redor reage
+                            for (int dx = -1; dx <= 1; dx++)
+                                for (int dy = -1; dy <= 1; dy++)
+                                    for (int dz = -1; dz <= 1; dz++)
+                                        chunkManager.enqueueWaterUpdate(pwx + dx, pwy + dy, pwz + dz);
+                        }
                         // Animação de colocar
                         hotbar.triggerPlaceSwing();
                     }

@@ -27,6 +27,7 @@ public class ChunkManager {
     }
 
     private final Map<ChunkCoord, LoadedChunk> loaded = new HashMap<>();
+    private final WaterSimulator waterSim = new WaterSimulator(this);
 
     public ChunkManager(Node worldNode, Material chunkMaterial, int seed, int viewRadius) {
         this.worldNode = worldNode;
@@ -82,6 +83,9 @@ public class ChunkManager {
                 budget--;
             }
         }
+
+        // Passo da simulação de água por frame (orçamento modesto)
+        waterSim.step(256);
     }
 
     private void generateChunk(ChunkCoord c) {
@@ -147,5 +151,80 @@ public class ChunkManager {
         int lz = wz - cz * Chunk.SIZE;
         if (lx < 0 || lx >= Chunk.SIZE || lz < 0 || lz >= Chunk.SIZE) return false;
         return lc.chunk.get(lx, wy, lz).isSolid();
+    }
+
+    // Para colisão: considera água como não bloqueante
+    public boolean isBlockingAtWorld(int wx, int wy, int wz) {
+        if (wy < 0 || wy >= Chunk.HEIGHT) return false;
+        int cx = worldToChunk(wx);
+        int cz = worldToChunk(wz);
+        LoadedChunk lc = loaded.get(new ChunkCoord(cx, cz));
+        if (lc == null) return false;
+        int lx = wx - cx * Chunk.SIZE;
+        int lz = wz - cz * Chunk.SIZE;
+        if (lx < 0 || lx >= Chunk.SIZE || lz < 0 || lz >= Chunk.SIZE) return false;
+        return lc.chunk.get(lx, wy, lz).isBlocking();
+    }
+
+    // --- Métodos utilitários de acesso global a blocos/meta ---
+    public BlockType getBlockAtWorld(int wx, int wy, int wz) {
+        int cx = worldToChunk(wx);
+        int cz = worldToChunk(wz);
+        LoadedChunk lc = loaded.get(new ChunkCoord(cx, cz));
+        if (lc == null) return BlockType.AIR;
+        int lx = wx - cx * Chunk.SIZE;
+        int lz = wz - cz * Chunk.SIZE;
+        if (wy < 0 || wy >= Chunk.HEIGHT || lx < 0 || lx >= Chunk.SIZE || lz < 0 || lz >= Chunk.SIZE) return BlockType.AIR;
+        return lc.chunk.get(lx, wy, lz);
+    }
+
+    public int getMetaAtWorld(int wx, int wy, int wz) {
+        int cx = worldToChunk(wx);
+        int cz = worldToChunk(wz);
+        LoadedChunk lc = loaded.get(new ChunkCoord(cx, cz));
+        if (lc == null) return 0;
+        int lx = wx - cx * Chunk.SIZE;
+        int lz = wz - cz * Chunk.SIZE;
+        if (wy < 0 || wy >= Chunk.HEIGHT || lx < 0 || lx >= Chunk.SIZE || lz < 0 || lz >= Chunk.SIZE) return 0;
+        return lc.chunk.getMeta(lx, wy, lz);
+    }
+
+    public void setMetaAtWorld(int wx, int wy, int wz, int value) {
+        int cx = worldToChunk(wx);
+        int cz = worldToChunk(wz);
+        LoadedChunk lc = loaded.get(new ChunkCoord(cx, cz));
+        if (lc == null) return;
+        int lx = wx - cx * Chunk.SIZE;
+        int lz = wz - cz * Chunk.SIZE;
+        if (wy < 0 || wy >= Chunk.HEIGHT || lx < 0 || lx >= Chunk.SIZE || lz < 0 || lz >= Chunk.SIZE) return;
+        lc.chunk.setMeta(lx, wy, lz, value);
+    }
+
+    public void setBlockAndMetaAtWorld(int wx, int wy, int wz, BlockType type, int meta) {
+        int cx = worldToChunk(wx);
+        int cz = worldToChunk(wz);
+        ChunkCoord key = new ChunkCoord(cx, cz);
+        LoadedChunk lc = loaded.get(key);
+        if (lc == null) return;
+        int lx = wx - cx * Chunk.SIZE;
+        int lz = wz - cz * Chunk.SIZE;
+        if (wy < 0 || wy >= Chunk.HEIGHT || lx < 0 || lx >= Chunk.SIZE || lz < 0 || lz >= Chunk.SIZE) return;
+        lc.chunk.set(lx, wy, lz, type);
+        lc.chunk.setMeta(lx, wy, lz, meta);
+        // Rebuild local chunk mesh
+        Geometry newGeom = lc.chunk.buildGeometry(chunkMaterial);
+        newGeom.setQueueBucket(RenderQueue.Bucket.Opaque);
+        lc.geom.removeFromParent();
+        worldNode.attachChild(newGeom);
+        lc.geom = newGeom;
+        // Rebuild neighbors if na borda
+        if (lx == 0) rebuildNeighbor(cx - 1, cz);
+        if (lx == Chunk.SIZE - 1) rebuildNeighbor(cx + 1, cz);
+        if (lz == 0) rebuildNeighbor(cx, cz - 1);
+        if (lz == Chunk.SIZE - 1) rebuildNeighbor(cx, cz + 1);
+    }
+
+    public void enqueueWaterUpdate(int wx, int wy, int wz) {
+        waterSim.enqueue(wx, wy, wz);
     }
 }

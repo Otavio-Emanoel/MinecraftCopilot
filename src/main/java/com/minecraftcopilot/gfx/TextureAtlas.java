@@ -31,11 +31,16 @@ public class TextureAtlas {
     }
 
     private void buildDefaultTiles() {
-        // Indices: 0 grass_top, 1 grass_side, 2 dirt, 3 stone
+        // Indices:
+        // 0 grass_top, 1 grass_side, 2 dirt, 3 stone, 4 log_side, 5 log_top, 6 leaves, 7 water
         drawGrassTop(0);
         drawGrassSide(1);
         drawDirt(2);
         drawStone(3);
+        drawLogSide(4);
+        drawLogTop(5);
+        drawLeaves(6);
+        drawWater(7);
     }
 
     private void drawGrassTop(int idx) {
@@ -105,6 +110,73 @@ public class TextureAtlas {
             int shade = r.nextInt(60);
             g.setColor(new Color(120 + shade, 120 + shade, 120 + shade));
             g.fillRect(px, py, 1, 1);
+        }
+        g.dispose();
+    }
+
+    private void drawLogSide(int idx) {
+        Graphics2D g = atlas.createGraphics();
+        int x = idx * tileSize;
+        // base marrom do tronco
+        g.setColor(new Color(102, 78, 52));
+        g.fillRect(x, 0, tileSize, tileSize);
+        // veios verticais
+        g.setColor(new Color(84, 64, 43));
+        for (int i = 0; i < tileSize; i += Math.max(1, tileSize/8)) {
+            g.fillRect(x + i, 0, 1, tileSize);
+        }
+        // ruído suave
+        Random r = new Random(5555 + idx);
+        for (int i = 0; i < tileSize * tileSize / 5; i++) {
+            int px = x + r.nextInt(tileSize);
+            int py = r.nextInt(tileSize);
+            int shade = r.nextInt(30);
+            g.setColor(new Color(102 - shade/6, 78 - shade/8, 52 - shade/10));
+            g.fillRect(px, py, 1, 1);
+        }
+        g.dispose();
+    }
+
+    private void drawLogTop(int idx) {
+        Graphics2D g = atlas.createGraphics();
+        int x = idx * tileSize;
+        // seção transversal com anéis
+        g.setColor(new Color(160, 120, 80));
+        g.fillRect(x, 0, tileSize, tileSize);
+        g.setColor(new Color(140, 100, 65));
+        int cx = x + tileSize/2;
+        int cy = tileSize/2;
+        for (int r = tileSize/2; r > 0; r -= Math.max(1, tileSize/10)) {
+            g.drawOval(cx - r, cy - r, r*2, r*2);
+        }
+        g.dispose();
+    }
+
+    private void drawLeaves(int idx) {
+        Graphics2D g = atlas.createGraphics();
+        int x = idx * tileSize;
+        g.setColor(new Color(70, 140, 60));
+        g.fillRect(x, 0, tileSize, tileSize);
+        Random r = new Random(7777 + idx);
+        for (int i = 0; i < tileSize * tileSize / 2; i++) {
+            int px = x + r.nextInt(tileSize);
+            int py = r.nextInt(tileSize);
+            int shade = r.nextInt(60);
+            g.setColor(new Color(70 + shade/3, 140 + shade/4, 60 + shade/6));
+            g.fillRect(px, py, 1, 1);
+        }
+        g.dispose();
+    }
+
+    private void drawWater(int idx) {
+        Graphics2D g = atlas.createGraphics();
+        int x = idx * tileSize;
+        // azul com padrão ondulado simples
+        g.setColor(new Color(40, 120, 220, 255));
+        g.fillRect(x, 0, tileSize, tileSize);
+        g.setColor(new Color(90, 170, 255, 255));
+        for (int i = 0; i < tileSize; i += Math.max(1, tileSize/8)) {
+            g.drawArc(x - tileSize/2, i - tileSize/4, tileSize*2, tileSize/2, 0, 180);
         }
         g.dispose();
     }
