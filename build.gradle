@@ -1,0 +1,31 @@
+plugins {
+    id 'application'
+}
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+dependencies {
+    implementation 'org.jmonkeyengine:jme3-core:3.6.1-stable'
+    implementation 'org.jmonkeyengine:jme3-desktop:3.6.1-stable'
+    // Backend LWJGL2 (mais estável em alguns drivers NVIDIA)
+    implementation 'org.jmonkeyengine:jme3-lwjgl:3.6.1-stable'
+}
+
+application {
+    mainClass = 'com.minecraftcopilot.Main'
+}
+
+run {
+    jvmArgs = [
+        // Evita problemas com drivers antigos
+        '-Dprism.verbose=false'
+    ]
+}
