@@ -78,6 +78,7 @@ public class ChunkManager {
         Geometry geom = chunk.buildGeometry(chunkMaterial);
         worldNode.attachChild(geom);
         loaded.put(c, geom);
+
     }
 
     public void clearAll() {

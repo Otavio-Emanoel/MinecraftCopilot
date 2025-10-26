@@ -10,6 +10,7 @@ import com.jme3.math.ColorRGBA;
 import com.jme3.math.Vector3f;
 import com.jme3.scene.Node;
 import com.minecraftcopilot.world.ChunkManager;
+import com.minecraftcopilot.player.PlayerController;
 
 public class VoxelGameState extends BaseAppState {
 
@@ -19,6 +20,7 @@ public class VoxelGameState extends BaseAppState {
     private ChunkManager chunkManager;
     private BitmapText crosshair;
     private BitmapFont font;
+    private PlayerController player;
 
     @Override
     protected void initialize(Application application) {
@@ -48,11 +50,15 @@ public class VoxelGameState extends BaseAppState {
         com.jme3.material.RenderState.FaceCullMode.Off);
 
     int seed = 1337;
-        this.chunkManager = new ChunkManager(worldNode, chunkMaterial, seed, 6);
+    this.chunkManager = new ChunkManager(worldNode, chunkMaterial, seed, 6);
         app.getRootNode().attachChild(worldNode);
 
-        app.getCamera().setLocation(new Vector3f(16, 25, 48));
-        app.getCamera().lookAt(new Vector3f(16, 15, 16), Vector3f.UNIT_Y);
+    app.getCamera().setLocation(new Vector3f(16, 30, 48));
+    app.getCamera().lookAt(new Vector3f(16, 15, 16), Vector3f.UNIT_Y);
+
+    // Jogador controlado sem Bullet (cinemático, com gravidade e pulo sobre chão plano)
+    player = new PlayerController();
+    getStateManager().attach(player);
 
         // Mira (crosshair) central
         this.font = app.getAssetManager().loadFont("Interface/Fonts/Default.fnt");
