@@ -69,6 +69,10 @@ public class HotbarState extends BaseAppState {
     private Node handNode;
     private Geometry handGeom;
 
+    // Animações de ação (quebrar/colocar)
+    private float hitAnim = 0f;   // 0..1 decai no tempo
+    private float placeAnim = 0f; // 0..1 decai no tempo
+
     public HotbarState(Material blockMaterial) {
         this.blockMaterial = blockMaterial;
         // Inicia vazio (o jogador pegará itens do inventário)
@@ -84,6 +88,10 @@ public class HotbarState extends BaseAppState {
     }
 
     public int getSelectedIndex() { return selected; }
+
+    // Disparadores de animação
+    public void triggerBreakSwing() { this.hitAnim = 1f; }
+    public void triggerPlaceSwing() { this.placeAnim = 1f; }
 
     public void setSlot(int index, BlockType type) {
         if (index < 0 || index >= slots.length) return;
@@ -304,13 +312,37 @@ public class HotbarState extends BaseAppState {
             var sw = pc.getHandSway();
             swayX = sw.x; swayY = sw.y;
         }
-        Vector3f pos = base.add(cam.getLeft().mult(-swayX)).add(cam.getUp().mult(swayY));
-        handNode.setLocalTranslation(pos);
+    // Decaimento das animações de ação
+    float decay = 6.0f; // mais alto = mais rápido
+    hitAnim = Math.max(0f, hitAnim - decay * tpf);
+    placeAnim = Math.max(0f, placeAnim - decay * tpf);
 
-        Quaternion rot = cam.getRotation().clone();
-        Quaternion tilt = new Quaternion().fromAngles(-0.25f + swayY * 0.7f, 0.35f + swayX * 0.8f, 0.15f + swayX * 0.4f);
-        rot = rot.mult(tilt);
-        handNode.setLocalRotation(rot);
+    // Offsets adicionais por ação
+    // Quebrar: swing para baixo e um pouco para a direita
+    float hitPhase = (1f - hitAnim); // 0 -> 1 durante a animação
+    float hitCurve = FastMath.sin(hitPhase * FastMath.PI); // sobe e desce
+    float hitTiltX = -0.9f * hitCurve * hitAnim; // baixar
+    float hitTiltZ = 0.35f * hitCurve * hitAnim; // girar levemente
+    Vector3f hitOffset = cam.getUp().mult(-0.03f * hitCurve * hitAnim)
+        .add(cam.getLeft().mult(0.02f * hitCurve * hitAnim));
+
+    // Colocar: empurrar para frente e girar um pouco para dentro
+    float placePhase = (1f - placeAnim);
+    float placeCurve = FastMath.sin(placePhase * FastMath.PI);
+    float placeTiltY = 0.25f * placeCurve * placeAnim;
+    Vector3f placeOffset = cam.getDirection().mult(0.06f * placeCurve * placeAnim)
+        .add(cam.getLeft().mult(-0.015f * placeCurve * placeAnim));
+
+    Vector3f pos = base.add(cam.getLeft().mult(-swayX)).add(cam.getUp().mult(swayY))
+        .add(hitOffset).add(placeOffset);
+    handNode.setLocalTranslation(pos);
+
+    Quaternion rot = cam.getRotation().clone();
+    Quaternion tilt = new Quaternion().fromAngles(-0.25f + swayY * 0.7f + hitTiltX,
+                             0.35f + swayX * 0.8f + placeTiltY,
+                             0.15f + swayX * 0.4f + hitTiltZ);
+    rot = rot.mult(tilt);
+    handNode.setLocalRotation(rot);
     }
 
     @Override

@@ -64,6 +64,8 @@ public class BlockInteractionState extends BaseAppState {
                 hasSelection = false;
                 if (outline != null) outline.removeFromParent();
                 outline = null;
+                // Animação de quebrar
+                if (hotbar != null) hotbar.triggerBreakSwing();
             } else if ("BI_Place".equals(name) && hasSelection && hotbar != null) {
                 BlockType toPlace = hotbar.getSelectedBlock();
                 if (toPlace != null && toPlace != BlockType.AIR && lastHitContact != null && lastRayDir != null) {
@@ -85,6 +87,8 @@ public class BlockInteractionState extends BaseAppState {
                     // Bloquear colocação que intersecta o jogador
                     if (!wouldIntersectPlayer(pwx, pwy, pwz)) {
                         chunkManager.setBlockAtWorld(pwx, pwy, pwz, toPlace);
+                        // Animação de colocar
+                        hotbar.triggerPlaceSwing();
                     }
                 }
             }

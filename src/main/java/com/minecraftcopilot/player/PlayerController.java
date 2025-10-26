@@ -58,6 +58,9 @@ public class PlayerController extends BaseAppState {
     private float crouchT = 0f; // 0: em pé, 1: agachado
     private float bobPhase = 0f;
     private float fovCurrent = 70f;
+    // Animação de mão/itens independente do head-bob da câmera
+    private float handPhase = 0f;
+    private boolean isMoving = false;
 
     private final ActionListener input = (name, isPressed, tpf) -> {
         if (!isEnabled()) return; // ignora entradas quando desabilitado (ex.: inventário aberto)
@@ -197,7 +200,7 @@ public class PlayerController extends BaseAppState {
         app.getCamera().setLocation(position);
 
         // Head-bob (só quando movendo)
-        boolean isMoving = (move.x != 0f || move.z != 0f);
+        isMoving = (move.x != 0f || move.z != 0f);
         if (isMoving) {
             float freq = 8.0f * speedMul;
             bobPhase += tpf * freq;
@@ -209,6 +212,13 @@ public class PlayerController extends BaseAppState {
         float amp = (wantCrouch ? 0.015f : 0.03f) * (sprintHeld && !wantCrouch ? 1.4f : 1.0f);
         float bob = FastMath.sin(bobPhase) * amp;
         app.getCamera().setLocation(app.getCamera().getLocation().add(0, bob, 0));
+
+        // Fase para sway de mão/itens: andando = freq normal, parado = mais lento
+        if (isMoving) {
+            handPhase += tpf * 8.0f * speedMul;
+        } else {
+            handPhase += tpf * 2.0f; // idle bem mais lento
+        }
 
         // Efeito de FOV dinâmico
         float baseFov = 70f;
@@ -400,8 +410,12 @@ public class PlayerController extends BaseAppState {
 
     // Exposto para UI/Hotbar fazer sway do item/mao
     public Vector2f getHandSway() {
-        float hor = FastMath.sin(bobPhase * 0.5f) * 0.05f * (sprintHeld ? 1.3f : 1f);
-        float ver = FastMath.sin(bobPhase) * 0.06f * (sprintHeld ? 1.2f : 1f) * (crouchHeld ? 0.6f : 1f);
+        // Usa handPhase para sway da mão. Em idle, amplitude reduzida.
+        float ampMul = (isMoving ? 1.0f : 0.35f);
+        float sprintMul = (sprintHeld ? 1.2f : 1f);
+        float crouchMul = (crouchHeld ? 0.7f : 1f);
+        float hor = FastMath.sin(handPhase * 0.5f) * 0.05f * ampMul * sprintMul;
+        float ver = FastMath.sin(handPhase) * 0.06f * ampMul * sprintMul * crouchMul;
         return new Vector2f(hor, ver);
     }
 }
