@@ -24,6 +24,7 @@ import com.jme3.scene.Spatial;
 import com.jme3.renderer.queue.RenderQueue;
 import com.jme3.scene.VertexBuffer;
 import com.jme3.scene.shape.Quad;
+import com.jme3.scene.shape.Box;
 import com.jme3.util.BufferUtils;
 import com.minecraftcopilot.BlockType;
 import com.minecraftcopilot.Chunk;
@@ -241,10 +242,26 @@ public class HotbarState extends BaseAppState {
             handGeom = null;
         }
         BlockType t = getSelectedBlock();
-        if (t == null || t == BlockType.AIR) return;
-        handGeom = buildBlockGeometry(t, blockMaterial);
-        handGeom.setLocalScale(0.28f);
+        if (t == null || t == BlockType.AIR) {
+            // Mostra uma "mão" quando não há item selecionado
+            handGeom = buildHandGeometry();
+            handGeom.setLocalScale(1f);
+        } else {
+            handGeom = buildBlockGeometry(t, blockMaterial);
+            handGeom.setLocalScale(0.28f);
+        }
         handNode.attachChild(handGeom);
+    }
+
+    private Geometry buildHandGeometry() {
+        // Retângulo 3D simples representando a mão (estilo low-poly)
+        Box box = new Box(0.12f, 0.08f, 0.22f); // largura, altura, profundidade
+        Geometry g = new Geometry("hand-geo", box);
+        Material m = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        // Tom de pele neutro; pode ser ajustado nas preferências do jogador futuramente
+        m.setColor("Color", new ColorRGBA(0.96f, 0.78f, 0.64f, 1f));
+        g.setMaterial(m);
+        return g;
     }
 
     private Geometry buildItemIcon(BlockType type) {
