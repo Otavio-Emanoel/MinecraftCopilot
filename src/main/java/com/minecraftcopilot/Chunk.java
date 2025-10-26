@@ -44,23 +44,53 @@ public class Chunk {
     }
 
     public void generateTerrain(int seed) {
-        float scale = 0.06f; // maior = mais suave
-        int base = 18;
-        int amp = 12;
+        // Parâmetros de terreno
+        final float baseScale = 0.06f; // frequência base (maior -> mais suave)
+        final int baseHeight = 18;     // nível médio do terreno
+        final int baseAmp = 12;        // amplitude dos morros principais
+
+        // Warping para variar padrões (distorção do domínio)
+        final float warpScale = 0.02f; // frequência do warp
+        final float warpAmp = 8.0f;    // força do warp em metros
+
+        // Ruído de cristas (ridge) para picos mais marcados
+        final float ridgeScale = 0.04f;
+        final float ridgeAmp = 6.0f;
+
         for (int x = 0; x < SIZE; x++) {
             for (int z = 0; z < SIZE; z++) {
                 float wx = (cx * SIZE + x);
                 float wz = (cz * SIZE + z);
-                float hNoise = Noise2D.fbm(wx * scale, wz * scale, seed, 4, 2.0f, 0.5f);
-                int h = base + Math.round(hNoise * amp);
+
+                // Domain warp: desloca coordenadas por um ruído lento
+                float warpX = (Noise2D.fbm(wx * warpScale, wz * warpScale, seed + 1337, 3, 2.0f, 0.5f) * 2f - 1f) * warpAmp;
+                float warpZ = (Noise2D.fbm(wx * warpScale + 57.0f, wz * warpScale - 91.0f, seed + 4242, 3, 2.0f, 0.5f) * 2f - 1f) * warpAmp;
+                float xw = wx + warpX;
+                float zw = wz + warpZ;
+
+                // Base hills com FBM
+                float baseNoise = Noise2D.fbm(xw * baseScale, zw * baseScale, seed, 4, 2.0f, 0.5f);
+                // Ridge: |2*fbm-1| para enfatizar cristas
+                float ridgeNoise = Math.abs(2f * Noise2D.fbm(xw * ridgeScale, zw * ridgeScale, seed + 911, 3, 2.0f, 0.5f) - 1f);
+
+                float heightF = baseHeight + baseNoise * baseAmp + ridgeNoise * ridgeAmp;
+                int h = Math.round(heightF);
                 if (h < 1) h = 1;
                 if (h >= HEIGHT) h = HEIGHT - 1;
 
+                // Materiais: topo grama, subsuperfície dirt, abaixo stone
+                // Se muito alto, chance de topo rochoso (sem grama)
+                boolean rockyTop = (h >= baseHeight + (int) (baseAmp * 0.75f)) && (Noise2D.noise(wx * 0.1f, wz * 0.1f, seed + 7) > 0.6f);
+
                 for (int y = 0; y <= h; y++) {
                     BlockType type;
-                    if (y == h) type = BlockType.GRASS;
-                    else if (y >= h - 3) type = BlockType.DIRT;
-                    else type = BlockType.STONE;
+                    if (y == h) {
+                        type = rockyTop ? BlockType.STONE : BlockType.GRASS;
+                    } else if (y >= h - 3) {
+                        type = BlockType.DIRT;
+                    } else {
+                        type = BlockType.STONE;
+                    }
                     set(x, y, z, type);
                 }
             }

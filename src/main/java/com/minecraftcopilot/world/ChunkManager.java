@@ -86,8 +86,8 @@ public class ChunkManager {
 
     private void generateChunk(ChunkCoord c) {
         Chunk chunk = new Chunk(c.x, c.z);
-        // Por enquanto: chão plano
-        chunk.generateFlat(18);
+        // Terreno procedural com morros usando seed
+        chunk.generateTerrain(seed);
         Geometry geom = chunk.buildGeometry(chunkMaterial);
         worldNode.attachChild(geom);
         loaded.put(c, new LoadedChunk(chunk, geom));
