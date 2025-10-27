@@ -15,6 +15,11 @@ public enum BlockType {
     EGG(7, new ColorRGBA(1f, 1f, 1f, 1f), 10, 10, 10) {
         @Override public boolean isSolid() { return false; }
         @Override public boolean isBlocking() { return false; }
+    },
+    // Bloco-ícone DevFest: não sólido e não bloqueante; ao "colocar", aciona o builder
+    DEVFEST(8, new ColorRGBA(0.9f, 0.85f, 0.3f, 1f), 11, 11, 11) {
+        @Override public boolean isSolid() { return false; }
+        @Override public boolean isBlocking() { return false; }
     };
 
     public final byte id;

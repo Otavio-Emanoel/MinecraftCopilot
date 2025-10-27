@@ -33,7 +33,7 @@ public class TextureAtlas {
     private void buildDefaultTiles() {
         // Indices:
         // 0 grass_top, 1 grass_side, 2 dirt, 3 stone, 4 log_side, 5 log_top, 6 leaves,
-        // 7 water_f0, 8 water_f1, 9 water_f2, 10 egg_item
+        // 7 water_f0, 8 water_f1, 9 water_f2, 10 egg_item, 11 devfest_item
         drawGrassTop(0);
         drawGrassSide(1);
         drawDirt(2);
@@ -46,6 +46,8 @@ public class TextureAtlas {
         drawWater(9, 2);
         // Item ovo (ícone)
         drawEgg(10);
+        // Ícone DevFest
+        drawDevFest(11);
     }
 
     private void drawGrassTop(int idx) {
@@ -223,6 +225,39 @@ public class TextureAtlas {
         // brilho
         g.setColor(new Color(255, 255, 220, 170));
         g.fillOval(x0 + pad + w/3, pad + h/6, w/3, h/4);
+        g.dispose();
+    }
+
+    private void drawDevFest(int idx) {
+        int x0 = idx * tileSize;
+        Graphics2D g = atlas.createGraphics();
+        // fundo transparente
+        g.setComposite(AlphaComposite.Clear);
+        g.fillRect(x0, 0, tileSize, tileSize);
+        g.setComposite(AlphaComposite.SrcOver);
+        // fundo sutil azul escuro
+        g.setColor(new Color(20, 30, 60, 220));
+        g.fillRect(x0, 0, tileSize, tileSize);
+        // moldura
+        g.setColor(new Color(40, 60, 110, 240));
+        g.setStroke(new BasicStroke(Math.max(1f, tileSize/24f)));
+        g.drawRect(x0 + 1, 1, tileSize - 2, tileSize - 2);
+        // letras DF estilizadas
+        g.setColor(new Color(255, 215, 0)); // dourado
+        int pad = Math.max(2, tileSize/8);
+        int mid = x0 + tileSize/2;
+        int h = tileSize - pad*2;
+        int w = (tileSize - pad*3)/2;
+        // D
+        g.fillRoundRect(x0 + pad, pad, w, h, pad, pad);
+        g.setColor(new Color(20, 30, 60));
+        g.fillRoundRect(x0 + pad + Math.max(2, w/3), pad + Math.max(2, h/6), w - Math.max(4, w/3), h - Math.max(4, h/3), pad/2, pad/2);
+        // F
+        g.setColor(new Color(255, 215, 0));
+        int xF = mid + pad/2;
+        g.fillRect(xF, pad, Math.max(2, w/5), h);
+        g.fillRect(xF, pad, w, Math.max(2, h/5));
+        g.fillRect(xF, pad + h/2 - Math.max(1, h/12), (int)(w*0.75), Math.max(2, h/5));
         g.dispose();
     }
 

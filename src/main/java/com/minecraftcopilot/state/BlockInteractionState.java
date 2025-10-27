@@ -21,6 +21,7 @@ import com.minecraftcopilot.Chunk;
 import com.minecraftcopilot.world.ChunkManager;
 import com.minecraftcopilot.ui.HotbarState;
 import com.minecraftcopilot.mobs.MobManager;
+import com.minecraftcopilot.world.DevFestBuilder;
 
 public class BlockInteractionState extends BaseAppState {
 
@@ -99,6 +100,9 @@ public class BlockInteractionState extends BaseAppState {
                                 Vector3f spawn = new Vector3f(pwx + 0.5f, pwy + 1.0f, pwz + 0.5f);
                                 mm.spawnEgg(spawn);
                             }
+                        } else if (toPlace == BlockType.DEVFEST) {
+                            // Dispara o builder do letreiro próximo ao jogador
+                            DevFestBuilder.placeDevFest(chunkManager, app.getCamera().getLocation(), app.getCamera().getDirection().normalize());
                         } else if (toPlace == BlockType.WATER) {
                             // Fonte de água meta=0
                             chunkManager.setBlockAndMetaAtWorld(pwx, pwy, pwz, BlockType.WATER, 0);

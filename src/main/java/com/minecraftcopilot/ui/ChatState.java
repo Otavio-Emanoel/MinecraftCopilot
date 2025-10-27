@@ -20,6 +20,8 @@ import com.jme3.renderer.queue.RenderQueue;
 import com.minecraftcopilot.player.PlayerController;
 import com.minecraftcopilot.state.BlockInteractionState;
 import com.minecraftcopilot.world.ChunkManager;
+import com.minecraftcopilot.world.DevFestBuilder;
+import com.jme3.math.Vector3f;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
@@ -234,11 +236,16 @@ public class ChatState extends BaseAppState {
 
     private void handleCommand(String cmd) {
         String c = cmd.toLowerCase();
-        if (c.equals("abc")) {
+        if (c.equals("abc") || c.equals("cleanwater")) {
             if (chunkManager != null) {
                 chunkManager.clearAllWater();
             }
             addMessage("[Sistema] Água removida.");
+        } else if (c.equals("devfest")) {
+            Vector3f camPos = app.getCamera().getLocation().clone();
+            Vector3f camDir = app.getCamera().getDirection().clone();
+            DevFestBuilder.placeDevFest(chunkManager, camPos, camDir);
+            addMessage("[Sistema] DevFest instalado! 🎉");
         } else {
             addMessage("[Sistema] Comando desconhecido: /" + cmd);
         }
