@@ -13,6 +13,8 @@ import com.jme3.math.FastMath;
 import com.jme3.math.Quaternion;
 import com.jme3.math.Vector3f;
 import com.minecraftcopilot.world.ChunkManager;
+import com.minecraftcopilot.BlockType;
+import com.minecraftcopilot.Chunk;
 import com.minecraftcopilot.ui.ChatState;
 import com.jme3.math.Vector2f;
 
@@ -47,6 +49,8 @@ public class PlayerController extends BaseAppState {
     private boolean allowFlight = false;
     private long lastJumpPressMs = 0L;
     private static final long DOUBLE_TAP_MS = 300L;
+    private boolean inWater = false;
+    private boolean headUnderwater = false;
     private float yaw = 0f;   // rotação em torno de Y
     private float pitch = 0f; // rotação em torno de X (clamp)
     private float mouseSensitivity = 2.2f;
@@ -152,6 +156,10 @@ public class PlayerController extends BaseAppState {
 
     @Override
     public void update(float tpf) {
+        // Detecta água: pés e cabeça
+        float feetY = position.y - eyeHeight;
+        inWater = isWaterAt(position.x, feetY + 0.3f, position.z) || isWaterAt(position.x, feetY + 0.7f, position.z);
+        headUnderwater = isWaterAt(position.x, position.y - 0.1f, position.z);
         // Determina estado de agachar com bloqueio se não houver espaço para levantar
         float prevEye = eyeHeight;
         float prevFeetY = position.y - prevEye;
@@ -191,11 +199,19 @@ public class PlayerController extends BaseAppState {
             move.multLocal(FLY_SPEED / MOVE_SPEED); // voo é mais rápido
         }
 
-        // Gravidade simples (desligada durante voo)
-        if (!flying) {
-            vy -= GRAVITY * tpf;
-        } else {
+        // Gravidade: desligada no voo; reduzida e com empuxo na água
+        if (flying) {
             vy = 0f;
+        } else if (inWater) {
+            // Empuxo simples: tende a subir levemente quando submerso
+            float buoy = headUnderwater ? 5.5f : 3.5f;
+            vy += buoy * tpf;
+            // gravidade reduzida
+            vy -= (GRAVITY * 0.35f) * tpf;
+            // damping vertical na água
+            vy *= (1f - 0.8f * tpf);
+        } else {
+            vy -= GRAVITY * tpf;
         }
 
         // Colisão voxel: resolve eixos Y, depois X e Z
@@ -205,6 +221,10 @@ public class PlayerController extends BaseAppState {
             // subir/descer com Espaço/Shift
             float ascend = (jump ? 1f : 0f) - (crouchHeld ? 1f : 0f);
             dy = ascend * FLY_SPEED * speedMul * tpf;
+        } else if (inWater) {
+            // Natação: sobe com Espaço, desce com Shift
+            float ascend = (jump ? 1f : 0f) - (crouchHeld ? 1f : 0f);
+            dy += ascend * 2.8f * tpf;
         }
         onGround = false;
         if (dy != 0) {
@@ -223,7 +243,7 @@ public class PlayerController extends BaseAppState {
         position.addLocal(dx, dy, dz);
 
         // Pulo
-        if (!flying && jump && onGround) {
+        if (!flying && !inWater && jump && onGround) {
             vy = JUMP_SPEED;
             onGround = false;
         }
@@ -246,6 +266,7 @@ public class PlayerController extends BaseAppState {
         }
     float amp = (wantCrouch ? 0.015f : 0.03f) * (sprintHeld && !wantCrouch ? 1.4f : 1.0f);
     if (flying) amp *= 0.2f; // voo quase sem head-bob
+    if (inWater) amp *= 0.4f; // bob reduzido na água
         float bob = FastMath.sin(bobPhase) * amp;
         app.getCamera().setLocation(app.getCamera().getLocation().add(0, bob, 0));
 
@@ -450,6 +471,7 @@ public class PlayerController extends BaseAppState {
         float ampMul = (isMoving ? 1.0f : 0.35f);
         float sprintMul = (sprintHeld ? 1.2f : 1f);
         float crouchMul = (crouchHeld ? 0.7f : 1f);
+        if (inWater) crouchMul *= 0.8f; // mão mais "pesada" na água
         float hor = FastMath.sin(handPhase * 0.5f) * 0.05f * ampMul * sprintMul;
         float ver = FastMath.sin(handPhase) * 0.06f * ampMul * sprintMul * crouchMul;
         return new Vector2f(hor, ver);
@@ -458,4 +480,13 @@ public class PlayerController extends BaseAppState {
     // Controle externo do voo
     public void setAllowFlight(boolean allow) { this.allowFlight = allow; }
     public boolean isFlying() { return flying; }
+    public boolean isInWater() { return inWater; }
+    public boolean isHeadUnderwater() { return headUnderwater; }
+
+    private boolean isWaterAt(float wx, float wy, float wz) {
+        int ix = floor(wx);
+        int iy = floor(wy);
+        int iz = floor(wz);
+        return chunkManager != null && chunkManager.getBlockAtWorld(ix, iy, iz) == BlockType.WATER;
+    }
 }

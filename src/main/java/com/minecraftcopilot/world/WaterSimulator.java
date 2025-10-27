@@ -27,7 +27,7 @@ public class WaterSimulator {
     private float tickAccum = 0f;
     private final float tickInterval = 0.08f; // ~12.5 ticks/seg (ajustável)
     private final int perTickBudget = 64;     // máximo de células por tick (ajustável)
-    private final int MAX_SIDE_LEVEL = 4;     // alcance lateral máximo (1..7). Menor que 7 para não espalhar tanto
+    private final int MAX_SIDE_LEVEL = 7;     // alcance lateral máximo (1..7). 7 permite escoamento mais natural
 
     public WaterSimulator(ChunkManager cm) {
         this.cm = cm;

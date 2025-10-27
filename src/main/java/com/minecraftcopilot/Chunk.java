@@ -290,7 +290,8 @@ public class Chunk {
                         int nz = z + DIRS[f][2];
                         BlockType n = get(nx, ny, nz);
                         if (!isWater) {
-                            if (n.isSolid()) continue; // sólidos não mostram face contra água
+                            // Oculta face apenas contra blocos que realmente bloqueiam (não água)
+                            if (n.isBlocking()) continue;
                             addFaceWithMeta(posSolid, colSolid, uvSolid, idxSolid, x, y, z, f, t, meta);
                         } else {
                             // Água: tratamento especial para diferenças de nível entre vizinhos de água
@@ -484,14 +485,17 @@ public class Chunk {
         indices.add(base + 3);
     }
 
-    // Calcula a altura visível da água para o bloco (1.0 fonte/queda/declive; 0.5 em superfície plana espalhada)
+    // Altura da água por nível, estilo MC: 0 (fonte) e 8 (queda) = 1.0; 1..7 = 1.0 - level*(1/8)
+    // Se estiver acima de ar/queda, considera coluna cheia (1.0)
     private float computeWaterHeight(int x, int y, int z, int meta) {
-        if (meta > 0 && meta < 8) {
-            BlockType below = get(x, y - 1, z);
-            boolean slope = (below == BlockType.AIR) || (below == BlockType.WATER && getMeta(x, y - 1, z) == 8);
-            return slope ? 1.0f : 0.5f;
+        if (meta <= 0 || meta == 8) return 1.0f;
+        // níveis 1..7
+        BlockType below = get(x, y - 1, z);
+        if (below == BlockType.AIR || (below == BlockType.WATER && getMeta(x, y - 1, z) == 8)) {
+            return 1.0f; // coluna/sobre queda: altura cheia
         }
-        return 1.0f;
+        int level = Math.max(1, Math.min(7, meta));
+        return 1.0f - (level / 8.0f);
     }
 
     // Renderiza face lateral de água recortada de y+hFrom até y+hTo (mostra apenas a "parede" exposta)

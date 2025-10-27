@@ -19,6 +19,7 @@ import com.minecraftcopilot.ui.InventoryState;
 import com.minecraftcopilot.Chunk;
 import com.minecraftcopilot.ui.ChatState;
 import com.minecraftcopilot.mobs.MobManager;
+import com.minecraftcopilot.ui.WaterFXState;
 
 public class VoxelGameState extends BaseAppState {
 
@@ -129,6 +130,9 @@ public class VoxelGameState extends BaseAppState {
         // Mobs
         mobManager = new MobManager(chunkManager);
         getStateManager().attach(mobManager);
+
+    // Efeito visual de água (overlay quando submerso)
+    getStateManager().attach(new WaterFXState());
     }
 
     @Override
