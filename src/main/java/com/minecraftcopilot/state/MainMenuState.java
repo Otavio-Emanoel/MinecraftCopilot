@@ -39,6 +39,9 @@ public class MainMenuState extends BaseAppState {
     private BitmapText title;
     private BitmapText titleShadow;
     private BitmapText subtitle;
+    // Botão Settings (placeholder)
+    private Geometry btnSettingsBg;
+    private BitmapText btnSettingsText;
     private Geometry btnPlayBg;
     private BitmapText btnPlayText;
     private Geometry btnExitBg;
@@ -66,6 +69,7 @@ public class MainMenuState extends BaseAppState {
 
     // Bounds para hit-test
     private float playX, playY, playW, playH;
+    private float settingsX, settingsY, settingsW, settingsH;
     private float exitX, exitY, exitW, exitH;
 
     private final ActionListener listener = new ActionListener() {
@@ -151,12 +155,15 @@ public class MainMenuState extends BaseAppState {
     guiRoot.attachChild(title);
     guiRoot.attachChild(subtitle);
 
-    // Botão Jogar
-    float btnW = Math.max(260f, width * 0.22f);
+    // Coluna de botões à esquerda (estilo Bedrock)
+    float btnW = Math.max(280f, width * 0.24f);
     float btnH = 56f;
+    float colX = width * 0.08f;
+    float colTop = height * 0.60f;
+    // Botão Jogar
     playW = btnW; playH = btnH;
-    playX = (width - btnW) / 2f;
-    playY = height * 0.35f;
+    playX = colX;
+    playY = colTop;
     btnPlayBg = new Geometry("btn-play", new Quad(btnW, btnH));
     Material mp = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
     mp.setColor("Color", new ColorRGBA(0.15f, 0.5f, 0.25f, 0.9f));
@@ -173,6 +180,27 @@ public class MainMenuState extends BaseAppState {
     btnPlayText.setLocalTranslation(playX + (btnW - btnPlayText.getLineWidth())/2f,
         playY + (btnH + btnPlayText.getLineHeight())/2f, 0);
     guiRoot.attachChild(btnPlayText);
+
+    // Botão Configurações (placeholder)
+    settingsW = btnW; settingsH = btnH;
+    settingsX = colX;
+    settingsY = playY - (btnH + 14f);
+    btnSettingsBg = new Geometry("btn-settings", new Quad(settingsW, settingsH));
+    Material mset = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+    mset.setColor("Color", new ColorRGBA(0.12f, 0.12f, 0.12f, 0.85f));
+    mset.getAdditionalRenderState().setBlendMode(RenderState.BlendMode.Alpha);
+    btnSettingsBg.setMaterial(mset);
+    btnSettingsBg.setQueueBucket(RenderQueue.Bucket.Gui);
+    btnSettingsBg.setLocalTranslation(settingsX, settingsY, 0);
+    guiRoot.attachChild(btnSettingsBg);
+
+    btnSettingsText = new BitmapText(font);
+    btnSettingsText.setText("Configurações");
+    btnSettingsText.setSize(font.getCharSet().getRenderedSize() * 1.0f);
+    btnSettingsText.setColor(new ColorRGBA(0.95f, 0.98f, 1f, 1f));
+    btnSettingsText.setLocalTranslation(settingsX + (settingsW - btnSettingsText.getLineWidth())/2f,
+        settingsY + (settingsH + btnSettingsText.getLineHeight())/2f, 0);
+    guiRoot.attachChild(btnSettingsText);
 
     // Campo Seed (acima dos botões)
     seedW = Math.max(320f, width * 0.35f);
@@ -254,8 +282,8 @@ public class MainMenuState extends BaseAppState {
 
     // Botão Sair
     exitW = btnW; exitH = btnH;
-    exitX = playX;
-    exitY = height * 0.25f;
+    exitX = colX;
+    exitY = settingsY - (btnH + 14f);
     btnExitBg = new Geometry("btn-exit", new Quad(exitW, exitH));
     Material me = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
     me.setColor("Color", new ColorRGBA(0.35f, 0.15f, 0.15f, 0.9f));
@@ -290,6 +318,7 @@ public class MainMenuState extends BaseAppState {
         getStateManager().detach(this);
         int seed = getSelectedSeed();
         getStateManager().attach(new VoxelGameState(seed, selectedMode));
+        getStateManager().attach(new LoadingState());
     }
 
     @Override
@@ -300,6 +329,8 @@ public class MainMenuState extends BaseAppState {
         if (subtitle != null) subtitle.removeFromParent();
         if (btnPlayBg != null) btnPlayBg.removeFromParent();
         if (btnPlayText != null) btnPlayText.removeFromParent();
+        if (btnSettingsBg != null) btnSettingsBg.removeFromParent();
+        if (btnSettingsText != null) btnSettingsText.removeFromParent();
         if (btnExitBg != null) btnExitBg.removeFromParent();
         if (btnExitText != null) btnExitText.removeFromParent();
         if (bgOverlay != null) bgOverlay.removeFromParent();
@@ -346,8 +377,9 @@ public class MainMenuState extends BaseAppState {
         // Hover visual nos botões
         if (app == null || app.getInputManager() == null) return;
         Vector2f cur = app.getInputManager().getCursorPosition();
-        boolean overPlay = hit(cur.x, cur.y, playX, playY, playW, playH);
-        boolean overExit = hit(cur.x, cur.y, exitX, exitY, exitW, exitH);
+    boolean overPlay = hit(cur.x, cur.y, playX, playY, playW, playH);
+    boolean overExit = hit(cur.x, cur.y, exitX, exitY, exitW, exitH);
+    boolean overSettings = hit(cur.x, cur.y, settingsX, settingsY, settingsW, settingsH);
         if (btnPlayBg != null) {
             var m = btnPlayBg.getMaterial();
             m.setColor("Color", overPlay ? new ColorRGBA(0.20f, 0.65f, 0.32f, 1f)
@@ -357,6 +389,11 @@ public class MainMenuState extends BaseAppState {
             var m = btnExitBg.getMaterial();
             m.setColor("Color", overExit ? new ColorRGBA(0.55f, 0.20f, 0.20f, 1f)
                                           : new ColorRGBA(0.35f, 0.15f, 0.15f, 0.9f));
+        }
+        if (btnSettingsBg != null) {
+            var m = btnSettingsBg.getMaterial();
+            m.setColor("Color", overSettings ? new ColorRGBA(0.18f, 0.18f, 0.18f, 0.95f)
+                                              : new ColorRGBA(0.12f, 0.12f, 0.12f, 0.85f));
         }
 
         // Seed box hover visual
@@ -393,6 +430,9 @@ public class MainMenuState extends BaseAppState {
             startGame();
         } else if (hit(cur.x, cur.y, exitX, exitY, exitW, exitH)) {
             app.stop();
+        } else if (hit(cur.x, cur.y, settingsX, settingsY, settingsW, settingsH)) {
+            // Placeholder: pequena animação/feedback visual
+            app.getViewPort().setBackgroundColor(new ColorRGBA(0.05f, 0.07f, 0.10f, 1f));
         } else if (hit(cur.x, cur.y, seedX, seedY, seedW, seedH)) {
             seedFocused = true;
         } else if (hit(cur.x, cur.y, modeCX, modeCY, modeCW, modeCH)) {

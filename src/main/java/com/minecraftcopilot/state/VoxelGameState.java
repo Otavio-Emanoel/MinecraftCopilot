@@ -53,6 +53,10 @@ public class VoxelGameState extends BaseAppState {
         this.gameMode = (mode != null ? mode : GameMode.CREATIVE);
     }
 
+    public ChunkManager getChunkManager() {
+        return chunkManager;
+    }
+
     @Override
     protected void initialize(Application application) {
         this.app = (SimpleApplication) application;
@@ -184,8 +188,12 @@ public class VoxelGameState extends BaseAppState {
     @Override
     public void update(float tpf) {
         if (chunkManager != null) {
-            // Gera até 4 chunks por frame para evitar travamento
-            chunkManager.update(app.getCamera().getLocation(), tpf, 4);
+            // Ajusta orçamento de geração de chunks: menor durante o LoadingState para suavizar
+            int genBudget = 4;
+            if (getStateManager().getState(LoadingState.class) != null) {
+                genBudget = 2; // reduzir durante a tela de carregamento
+            }
+            chunkManager.update(app.getCamera().getLocation(), tpf, genBudget);
         }
         centerCrosshair();
     }

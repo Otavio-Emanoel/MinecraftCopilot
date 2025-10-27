@@ -55,6 +55,9 @@ public class PlayerController extends BaseAppState {
     private float pitch = 0f; // rotação em torno de X (clamp)
     private float mouseSensitivity = 2.2f;
     private final ChunkManager chunkManager;
+    // Correção de spawn: garantir que o jogador não nasça dentro da terra
+    private boolean pendingSafeSpawn = true;
+    private int spawnSafetySteps = 64; // sobe até 64 blocos se estiver preso, como fallback
 
     // Sprint/agachar e animações
     private static final String MAP_SPRINT = "PC_Sprint";
@@ -152,10 +155,18 @@ public class PlayerController extends BaseAppState {
         pitch = angles[0];
         yaw = angles[1];
         clampPitch();
+
+        // Tentativa inicial: se já houver chunks, alinhar ao topo do solo
+        tryAlignToGround();
     }
 
     @Override
     public void update(float tpf) {
+        // Antes de qualquer física, garante que não está dentro de bloco ao spawnar
+        if (pendingSafeSpawn) {
+            boolean done = ensureNotInsideSolidOrAlign();
+            if (done) pendingSafeSpawn = false;
+        }
         // Detecta água: pés e cabeça
         float feetY = position.y - eyeHeight;
         inWater = isWaterAt(position.x, feetY + 0.3f, position.z) || isWaterAt(position.x, feetY + 0.7f, position.z);
@@ -463,6 +474,70 @@ public class PlayerController extends BaseAppState {
             }
         }
         return true;
+    }
+
+    // --- Correção de spawn ---
+    private void tryAlignToGround() {
+        if (chunkManager == null) return;
+        // Procura solo em (x,z) atual descendo do topo do mundo
+        int wx = floor(position.x);
+        int wz = floor(position.z);
+        int top = Chunk.HEIGHT - 1;
+        for (int y = top; y >= 0; y--) {
+            if (chunkManager.isBlockingAtWorld(wx, y, wz)) {
+                float feet = y + 1 + EPS;
+                position.y = feet + eyeHeight;
+                return;
+            }
+        }
+        // Se não encontrou (chunks não carregados), deixa para o ensureNotInsideSolidOrAlign()
+    }
+
+    private boolean ensureNotInsideSolidOrAlign() {
+        if (chunkManager == null) return true; // nada a fazer
+        // 1) se estiver colidindo com bloco, sobe até liberar (com limite de passos)
+        if (isIntersectingSolid()) {
+            if (spawnSafetySteps-- > 0) {
+                position.y += 1.0f;
+                return false; // ainda ajustando
+            } else {
+                return true; // evita loop infinito
+            }
+        }
+        // 2) se não estiver colidindo, tenta alinhar exatamente acima do solo (caso esteja no vazio)
+        int wx = floor(position.x);
+        int wz = floor(position.z);
+        int top = Chunk.HEIGHT - 1;
+        for (int y = top; y >= 0; y--) {
+            if (chunkManager.isBlockingAtWorld(wx, y, wz)) {
+                float feet = y + 1 + EPS;
+                // Se já estamos acima, não desce, apenas confirma
+                if (position.y - eyeHeight < feet) {
+                    position.y = feet + eyeHeight;
+                }
+                return true;
+            }
+        }
+        // Se ainda não há informação de terreno (nenhum bloco bloqueante encontrado), continua tentando posteriormente
+        return false;
+    }
+
+    private boolean isIntersectingSolid() {
+        float feetY = position.y - eyeHeight;
+        float minX = position.x - HALF_WIDTH;
+        float maxX = position.x + HALF_WIDTH;
+        float minZ = position.z - HALF_WIDTH;
+        float maxZ = position.z + HALF_WIDTH;
+        int minBy = floor(feetY);
+        int maxBy = floor(feetY + bodyHeight - EPS);
+        for (int by = minBy; by <= maxBy; by++) {
+            for (int ix = floor(minX); ix <= floor(maxX - EPS); ix++) {
+                for (int iz = floor(minZ); iz <= floor(maxZ - EPS); iz++) {
+                    if (solidAt(ix, by, iz)) return true;
+                }
+            }
+        }
+        return false;
     }
 
     // Exposto para UI/Hotbar fazer sway do item/mao

@@ -46,6 +46,10 @@ public class ChunkManager {
         this.viewRadius = Math.max(1, viewRadius);
     }
 
+    // Expor quantidade de chunks carregados e o raio de visão para telas de loading
+    public int getLoadedChunkCount() { return loaded.size(); }
+    public int getViewRadius() { return viewRadius; }
+
     private static int worldToChunk(float world) {
         return (int) Math.floor(world / Chunk.SIZE);
     }
