@@ -152,6 +152,43 @@ public class ChunkManager {
         loaded.clear();
     }
 
+    // Remove toda a água carregada e reconstrói os chunks; reseta a simulação
+    public void clearAllWater() {
+        for (Map.Entry<ChunkCoord, LoadedChunk> e : loaded.entrySet()) {
+            LoadedChunk lc = e.getValue();
+            Chunk ch = lc.chunk;
+            boolean modified = false;
+            for (int y = 0; y < Chunk.HEIGHT; y++) {
+                for (int z = 0; z < Chunk.SIZE; z++) {
+                    for (int x = 0; x < Chunk.SIZE; x++) {
+                        if (ch.get(x, y, z) == BlockType.WATER) {
+                            ch.set(x, y, z, BlockType.AIR);
+                            ch.setMeta(x, y, z, 0);
+                            modified = true;
+                        }
+                    }
+                }
+            }
+            if (modified) {
+                Node newGeom = ch.buildGeometryPair(chunkMaterialSolid, chunkMaterialWater);
+                for (Spatial s : newGeom.getChildren()) {
+                    if (s.getName().contains("water")) s.setQueueBucket(RenderQueue.Bucket.Transparent);
+                    else s.setQueueBucket(RenderQueue.Bucket.Opaque);
+                }
+                lc.geom.removeFromParent();
+                worldNode.attachChild(newGeom);
+                lc.geom = newGeom;
+            }
+        }
+        // Reset animação e simulação
+        waterAnimAccum = 0f;
+        waterAnimFrame = 0;
+        Chunk.setWaterAnimFrame(0);
+        animKeys.clear();
+        waterAnimCursor = 0;
+        waterSim.reset();
+    }
+
     public boolean setBlockAtWorld(int wx, int wy, int wz, BlockType type) {
         int cx = worldToChunk(wx);
         int cz = worldToChunk(wz);

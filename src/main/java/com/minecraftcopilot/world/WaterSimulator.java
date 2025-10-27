@@ -33,6 +33,12 @@ public class WaterSimulator {
         this.cm = cm;
     }
 
+    public void reset() {
+        queueNow.clear();
+        queueNext.clear();
+        tickAccum = 0f;
+    }
+
     public void enqueue(int wx, int wy, int wz) {
         // Eventos externos (colocar/quebrar) entram para a onda atual
         queueNow.add(new int[]{wx, wy, wz});

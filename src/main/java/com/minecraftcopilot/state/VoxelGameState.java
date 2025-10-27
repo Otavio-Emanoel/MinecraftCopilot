@@ -17,6 +17,7 @@ import com.minecraftcopilot.ui.HotbarState;
 import com.minecraftcopilot.state.BlockInteractionState;
 import com.minecraftcopilot.ui.InventoryState;
 import com.minecraftcopilot.Chunk;
+import com.minecraftcopilot.ui.ChatState;
 
 public class VoxelGameState extends BaseAppState {
 
@@ -29,6 +30,7 @@ public class VoxelGameState extends BaseAppState {
     private BitmapFont font;
     private PlayerController player;
     private HotbarState hotbar;
+    private ChatState chat;
     private BlockInteractionState blockInteraction;
     private InventoryState inventory;
     private int worldSeed = 1337;
@@ -36,6 +38,8 @@ public class VoxelGameState extends BaseAppState {
     private static final String MAP_INV = "VG_Inventory";
     private final ActionListener invListener = (name, isPressed, tpf) -> {
         if (!isPressed) return;
+        // Se o chat estiver aberto, teclado é exclusivo do chat
+        if (chat != null && chat.isOpen()) return;
         if (MAP_INV.equals(name)) toggleInventory();
     };
 
@@ -98,7 +102,7 @@ public class VoxelGameState extends BaseAppState {
     hotbar = new HotbarState(chunkMaterialSolid);
         getStateManager().attach(hotbar);
 
-        // Interação com blocos: contorno + destruir com clique esquerdo + colocar com direito
+    // Interação com blocos: contorno + destruir com clique esquerdo + colocar com direito
         blockInteraction = new BlockInteractionState(worldNode, chunkManager, hotbar);
         getStateManager().attach(blockInteraction);
 
@@ -113,6 +117,10 @@ public class VoxelGameState extends BaseAppState {
         crosshair.setSize(font.getCharSet().getRenderedSize() * 1.2f);
         app.getGuiNode().attachChild(crosshair);
         centerCrosshair();
+
+        // Chat: abre com T e permite comandos (ex.: /cleanwater)
+        chat = new ChatState(chunkManager);
+        getStateManager().attach(chat);
     }
 
     @Override
