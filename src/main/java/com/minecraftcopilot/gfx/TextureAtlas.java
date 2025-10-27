@@ -32,7 +32,8 @@ public class TextureAtlas {
 
     private void buildDefaultTiles() {
         // Indices:
-        // 0 grass_top, 1 grass_side, 2 dirt, 3 stone, 4 log_side, 5 log_top, 6 leaves, 7 water_f0, 8 water_f1, 9 water_f2
+        // 0 grass_top, 1 grass_side, 2 dirt, 3 stone, 4 log_side, 5 log_top, 6 leaves,
+        // 7 water_f0, 8 water_f1, 9 water_f2, 10 egg_item
         drawGrassTop(0);
         drawGrassSide(1);
         drawDirt(2);
@@ -43,6 +44,8 @@ public class TextureAtlas {
         drawWater(7, 0);
         drawWater(8, 1);
         drawWater(9, 2);
+        // Item ovo (ícone)
+        drawEgg(10);
     }
 
     private void drawGrassTop(int idx) {
@@ -199,6 +202,28 @@ public class TextureAtlas {
                 atlas.setRGB(ox + xx, yy, argb);
             }
         }
+    }
+
+    private void drawEgg(int idx) {
+        int x0 = idx * tileSize;
+        Graphics2D g = atlas.createGraphics();
+        // fundo transparente total
+        g.setComposite(AlphaComposite.Clear);
+        g.fillRect(x0, 0, tileSize, tileSize);
+        g.setComposite(AlphaComposite.SrcOver);
+        // ovo simples: elipse amarela com contorno
+        int pad = Math.max(2, tileSize/6);
+        int w = tileSize - pad*2;
+        int h = tileSize - pad*2;
+        g.setColor(new Color(255, 235, 120));
+        g.fillOval(x0 + pad, pad, w, h);
+        g.setColor(new Color(200, 180, 80));
+        g.setStroke(new BasicStroke(Math.max(1f, tileSize/32f)));
+        g.drawOval(x0 + pad, pad, w, h);
+        // brilho
+        g.setColor(new Color(255, 255, 220, 170));
+        g.fillOval(x0 + pad + w/3, pad + h/6, w/3, h/4);
+        g.dispose();
     }
 
     private static int clamp255(int v) {

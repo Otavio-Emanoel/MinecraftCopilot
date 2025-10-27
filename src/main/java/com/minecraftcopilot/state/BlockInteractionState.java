@@ -20,6 +20,7 @@ import com.minecraftcopilot.BlockType;
 import com.minecraftcopilot.Chunk;
 import com.minecraftcopilot.world.ChunkManager;
 import com.minecraftcopilot.ui.HotbarState;
+import com.minecraftcopilot.mobs.MobManager;
 
 public class BlockInteractionState extends BaseAppState {
 
@@ -91,7 +92,14 @@ public class BlockInteractionState extends BaseAppState {
                     }
                     // Bloquear colocação que intersecta o jogador
                     if (!wouldIntersectPlayer(pwx, pwy, pwz)) {
-                        if (toPlace == BlockType.WATER) {
+                        if (toPlace == BlockType.EGG) {
+                            // Spawn de galinha: não coloca bloco
+                            MobManager mm = getStateManager().getState(MobManager.class);
+                            if (mm != null) {
+                                Vector3f spawn = new Vector3f(pwx + 0.5f, pwy + 1.0f, pwz + 0.5f);
+                                mm.spawnEgg(spawn);
+                            }
+                        } else if (toPlace == BlockType.WATER) {
                             // Fonte de água meta=0
                             chunkManager.setBlockAndMetaAtWorld(pwx, pwy, pwz, BlockType.WATER, 0);
                             chunkManager.enqueueWaterUpdate(pwx, pwy, pwz);

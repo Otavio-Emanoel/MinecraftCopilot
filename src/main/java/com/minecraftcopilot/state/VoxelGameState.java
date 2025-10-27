@@ -18,6 +18,7 @@ import com.minecraftcopilot.state.BlockInteractionState;
 import com.minecraftcopilot.ui.InventoryState;
 import com.minecraftcopilot.Chunk;
 import com.minecraftcopilot.ui.ChatState;
+import com.minecraftcopilot.mobs.MobManager;
 
 public class VoxelGameState extends BaseAppState {
 
@@ -31,6 +32,7 @@ public class VoxelGameState extends BaseAppState {
     private PlayerController player;
     private HotbarState hotbar;
     private ChatState chat;
+    private MobManager mobManager;
     private BlockInteractionState blockInteraction;
     private InventoryState inventory;
     private int worldSeed = 1337;
@@ -71,7 +73,7 @@ public class VoxelGameState extends BaseAppState {
         this.chunkMaterialSolid = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
         this.chunkMaterialSolid.setBoolean("VertexColor", true);
     // Aumenta quantidade de tiles para incluir tronco/folhas/água animada (3 frames)
-    TextureAtlas atlas = new TextureAtlas(16, 10);
+    TextureAtlas atlas = new TextureAtlas(16, 11);
     Chunk.ATLAS = atlas;
     var tex = atlas.buildTexture(app.getAssetManager());
     this.chunkMaterialSolid.setTexture("ColorMap", tex);
@@ -121,6 +123,10 @@ public class VoxelGameState extends BaseAppState {
         // Chat: abre com T e permite comandos (ex.: /cleanwater)
         chat = new ChatState(chunkManager);
         getStateManager().attach(chat);
+
+        // Mobs
+        mobManager = new MobManager(chunkManager);
+        getStateManager().attach(mobManager);
     }
 
     @Override
