@@ -13,6 +13,7 @@ import com.jme3.math.FastMath;
 import com.jme3.math.Quaternion;
 import com.jme3.math.Vector3f;
 import com.minecraftcopilot.world.ChunkManager;
+import com.minecraftcopilot.ui.ChatState;
 import com.jme3.math.Vector2f;
 
 public class PlayerController extends BaseAppState {
@@ -33,6 +34,7 @@ public class PlayerController extends BaseAppState {
     private static final float GRAVITY = 19.6f;  // m/s^2
     private static final float JUMP_SPEED = 6.8f;
     private static final float MOVE_SPEED = 5.0f;
+    private static final float FLY_SPEED = 8.0f;
     private static final float EPS = 1e-4f;
 
     private SimpleApplication app;
@@ -41,6 +43,10 @@ public class PlayerController extends BaseAppState {
     private boolean onGround = false;
 
     private boolean fwd, back, left, right, jump;
+    private boolean flying = false;
+    private boolean allowFlight = false;
+    private long lastJumpPressMs = 0L;
+    private static final long DOUBLE_TAP_MS = 300L;
     private float yaw = 0f;   // rotação em torno de Y
     private float pitch = 0f; // rotação em torno de X (clamp)
     private float mouseSensitivity = 2.2f;
@@ -69,7 +75,23 @@ public class PlayerController extends BaseAppState {
         else if (MAP_BACK.equals(name)) back = val;
         else if (MAP_LEFT.equals(name)) left = val;
         else if (MAP_RIGHT.equals(name)) right = val;
-        else if (MAP_JUMP.equals(name)) jump = val;
+        else if (MAP_JUMP.equals(name)) {
+            jump = val;
+            if (val && allowFlight) {
+                long now = System.currentTimeMillis();
+                if (now - lastJumpPressMs <= DOUBLE_TAP_MS) {
+                    flying = !flying;
+                    vy = 0f; // zera velocidade vertical ao alternar
+                    onGround = false;
+                    // feedback opcional no chat
+                    ChatState chat = getStateManager().getState(ChatState.class);
+                    if (chat != null) chat.systemMessage("Voo " + (flying ? "ativado" : "desativado"));
+                    lastJumpPressMs = 0L; // evita múltiplos toggles
+                } else {
+                    lastJumpPressMs = now;
+                }
+            }
+        }
         else if (MAP_SPRINT.equals(name)) sprintHeld = val;
         else if (MAP_CROUCH.equals(name)) crouchHeld = val;
     };
@@ -134,7 +156,8 @@ public class PlayerController extends BaseAppState {
         float prevEye = eyeHeight;
         float prevFeetY = position.y - prevEye;
 
-        boolean wantCrouch = crouchHeld;
+    boolean wantCrouch = crouchHeld;
+    if (flying) wantCrouch = false; // no voo não encolhemos o corpo
         if (!wantCrouch && !hasHeadroom()) {
             wantCrouch = true;
         }
@@ -164,13 +187,25 @@ public class PlayerController extends BaseAppState {
         if (sprintHeld && !wantCrouch) speedMul = 1.6f;
         if (wantCrouch) speedMul = 0.45f;
         if (move.lengthSquared() > 0) move.normalizeLocal().multLocal(MOVE_SPEED * speedMul * tpf);
+        if (flying && move.lengthSquared() > 0) {
+            move.multLocal(FLY_SPEED / MOVE_SPEED); // voo é mais rápido
+        }
 
-        // Gravidade simples
-        vy -= GRAVITY * tpf;
+        // Gravidade simples (desligada durante voo)
+        if (!flying) {
+            vy -= GRAVITY * tpf;
+        } else {
+            vy = 0f;
+        }
 
         // Colisão voxel: resolve eixos Y, depois X e Z
         // 1) Y
         float dy = vy * tpf;
+        if (flying) {
+            // subir/descer com Espaço/Shift
+            float ascend = (jump ? 1f : 0f) - (crouchHeld ? 1f : 0f);
+            dy = ascend * FLY_SPEED * speedMul * tpf;
+        }
         onGround = false;
         if (dy != 0) {
             dy = resolveAxisY(dy);
@@ -188,7 +223,7 @@ public class PlayerController extends BaseAppState {
         position.addLocal(dx, dy, dz);
 
         // Pulo
-        if (jump && onGround) {
+        if (!flying && jump && onGround) {
             vy = JUMP_SPEED;
             onGround = false;
         }
@@ -200,7 +235,7 @@ public class PlayerController extends BaseAppState {
         app.getCamera().setLocation(position);
 
         // Head-bob (só quando movendo)
-        isMoving = (move.x != 0f || move.z != 0f);
+    isMoving = (move.x != 0f || move.z != 0f || (flying && Math.abs(dy) > 0f));
         if (isMoving) {
             float freq = 8.0f * speedMul;
             bobPhase += tpf * freq;
@@ -209,7 +244,8 @@ public class PlayerController extends BaseAppState {
             bobPhase += tpf * 4f * (bobPhase > 0 ? -1f : 1f);
             if (FastMath.abs(bobPhase) < 0.001f) bobPhase = 0f;
         }
-        float amp = (wantCrouch ? 0.015f : 0.03f) * (sprintHeld && !wantCrouch ? 1.4f : 1.0f);
+    float amp = (wantCrouch ? 0.015f : 0.03f) * (sprintHeld && !wantCrouch ? 1.4f : 1.0f);
+    if (flying) amp *= 0.2f; // voo quase sem head-bob
         float bob = FastMath.sin(bobPhase) * amp;
         app.getCamera().setLocation(app.getCamera().getLocation().add(0, bob, 0));
 
@@ -418,4 +454,8 @@ public class PlayerController extends BaseAppState {
         float ver = FastMath.sin(handPhase) * 0.06f * ampMul * sprintMul * crouchMul;
         return new Vector2f(hor, ver);
     }
+
+    // Controle externo do voo
+    public void setAllowFlight(boolean allow) { this.allowFlight = allow; }
+    public boolean isFlying() { return flying; }
 }

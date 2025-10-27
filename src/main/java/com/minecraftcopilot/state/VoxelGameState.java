@@ -97,8 +97,10 @@ public class VoxelGameState extends BaseAppState {
         app.getCamera().setFrustumPerspective(70f, aspect, 0.05f, 1000f);
 
         // Jogador controlado sem Bullet com colisão voxel
-        player = new PlayerController(chunkManager);
+    player = new PlayerController(chunkManager);
         getStateManager().attach(player);
+    // Permite voo apenas no modo Criativo
+    player.setAllowFlight(gameMode == GameMode.CREATIVE);
 
     // Hotbar com 9 slots e item na mão (usa o material sólido com atlas)
     hotbar = new HotbarState(chunkMaterialSolid);

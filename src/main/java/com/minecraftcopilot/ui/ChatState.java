@@ -250,6 +250,11 @@ public class ChatState extends BaseAppState {
         if (open) attachUI();
     }
 
+    // Mensagem de sistema pública para outros estados (ex.: PlayerController)
+    public void systemMessage(String msg) {
+        addMessage("[Sistema] " + msg);
+    }
+
     private Character getPrintableChar(KeyInputEvent evt) {
         try {
             Method m = evt.getClass().getMethod("getCharacter");
