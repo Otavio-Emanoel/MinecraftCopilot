@@ -664,7 +664,7 @@ public class HotbarState extends BaseAppState {
             float len = dir.length();
             if (len > 0.02f) { // segmento relevante
                 dir.divideLocal(len);
-                float width = 0.06f; float halfLen = len * 0.5f;
+                float width = 0.08f; float halfLen = len * 0.5f; // rastro um pouco mais largo
                 Geometry trail = new Geometry("sword-trail", new Box(width, width * 0.15f, halfLen));
                 Material tm = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
                 tm.setColor("Color", new ColorRGBA(0.9f, 0.95f, 1f, 0.35f));
@@ -682,7 +682,14 @@ public class HotbarState extends BaseAppState {
                 var mm = getStateManager().getState(com.minecraftcopilot.mobs.MobManager.class);
                 if (mm != null) {
                     float baseDmg = Math.min(12f, len * 60f); // quanto mais rápido o movimento, maior dano
-                    mm.applySwordSweep(lastTipWS.clone(), tipWS.clone(), 0.18f, baseDmg, dir.clone());
+                    // Aumenta o alcance: raio maior no sweep principal
+                    mm.applySwordSweep(lastTipWS.clone(), tipWS.clone(), 0.28f, baseDmg, dir.clone());
+
+                    // Alcance extra à frente ("poke"): varredura curta no sentido da câmera a partir da ponta
+                    var camDir = app.getCamera().getDirection().normalize();
+                    Vector3f pokeStart = tipWS.clone();
+                    Vector3f pokeEnd = tipWS.add(camDir.mult(0.5f)); // ~0.5m de alcance adicional
+                    mm.applySwordSweep(pokeStart, pokeEnd, 0.16f, baseDmg * 0.8f, camDir.clone());
                 }
             }
         }
