@@ -17,6 +17,8 @@ import com.jme3.math.ColorRGBA;
 import com.jme3.math.FastMath;
 import com.jme3.math.Quaternion;
 import com.jme3.math.Vector3f;
+import com.jme3.light.AmbientLight;
+import com.jme3.light.DirectionalLight;
 import com.jme3.scene.Geometry;
 import com.jme3.scene.Mesh;
 import com.jme3.scene.Node;
@@ -26,6 +28,8 @@ import com.jme3.scene.VertexBuffer;
 import com.jme3.scene.shape.Quad;
 import com.jme3.scene.shape.Box;
 import com.jme3.util.BufferUtils;
+import com.jme3.texture.Image;
+import com.jme3.texture.Texture2D;
 import com.minecraftcopilot.BlockType;
 import com.minecraftcopilot.Chunk;
 
@@ -68,6 +72,17 @@ public class HotbarState extends BaseAppState {
     // Hand item
     private Node handNode;
     private Spatial handGeom;
+    private Node swordPivotNode; // quando a mão segura uma espada
+    private Node swordModelNode; // modelo real da espada
+    private Node swordTipNode;   // nó de referência na ponta
+
+    // Rastro da espada (afterimage)
+    private static class TrailSegment {
+        Geometry geo; float life; float maxLife;
+        TrailSegment(Geometry g, float life) { this.geo = g; this.life = life; this.maxLife = life; }
+    }
+    private final List<TrailSegment> swordTrails = new ArrayList<>();
+    private Vector3f lastTipWS = null;
 
     // Animações de ação (quebrar/colocar)
     private float hitAnim = 0f;   // 0..1 decai no tempo (para blocos/itens comuns)
@@ -165,8 +180,16 @@ public class HotbarState extends BaseAppState {
         updateHighlightPosition();
 
         // Nó e geometria do item na mão
-        handNode = new Node("handNode");
+    handNode = new Node("handNode");
         app.getRootNode().attachChild(handNode);
+    // Luzes locais para Lighting nos itens da mão
+    AmbientLight amb = new AmbientLight();
+    amb.setColor(new ColorRGBA(0.35f, 0.35f, 0.4f, 1f));
+    handNode.addLight(amb);
+    DirectionalLight sun = new DirectionalLight();
+    sun.setDirection(new Vector3f(-0.5f, -1f, -0.2f).normalizeLocal());
+    sun.setColor(new ColorRGBA(1f,1f,1f,1f));
+    handNode.addLight(sun);
         rebuildHandItem();
 
         // Inputs
@@ -268,6 +291,13 @@ public class HotbarState extends BaseAppState {
             handGeom.removeFromParent();
             handGeom = null;
         }
+        // Limpa rastros antigos
+        for (int i = swordTrails.size() - 1; i >= 0; i--) {
+            var s = swordTrails.get(i);
+            if (s.geo != null) s.geo.removeFromParent();
+            swordTrails.remove(i);
+        }
+        swordPivotNode = null; swordModelNode = null; swordTipNode = null; lastTipWS = null;
         BlockType t = getSelectedBlock();
         if (t == null || t == BlockType.AIR) {
             // Mostra uma "mão" quando não há item selecionado
@@ -276,6 +306,11 @@ public class HotbarState extends BaseAppState {
         } else if (t == BlockType.SWORD) {
             handGeom = buildSwordModel();
             handGeom.setLocalScale(0.7f);
+            if (handGeom instanceof Node n) {
+                swordPivotNode = n;
+                swordModelNode = (Node) n.getChild("swordModel");
+                if (swordModelNode != null) swordTipNode = (Node) swordModelNode.getChild("tip");
+            }
         } else {
             handGeom = buildBlockGeometry(t, blockMaterial);
             handGeom.setLocalScale(0.28f);
@@ -299,20 +334,34 @@ public class HotbarState extends BaseAppState {
         Node gripPivot = new Node("swordPivot");
         Node sword = new Node("swordModel");
         // Materiais simples (cores inspiradas na imagem)
-        Material mBlade = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
-        mBlade.setColor("Color", new ColorRGBA(0.88f, 0.9f, 0.95f, 1f));
-        Material mEdge = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
-        mEdge.setColor("Color", new ColorRGBA(1f, 1f, 1f, 1f));
-        Material mGuard = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
-        mGuard.setColor("Color", new ColorRGBA(0.96f, 0.84f, 0.20f, 1f)); // dourado vivo
-        Material mHandle = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
-        mHandle.setColor("Color", new ColorRGBA(0.13f, 0.10f, 0.09f, 1f)); // marrom escuro quase preto
-        Material mHandleLite = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
-        mHandleLite.setColor("Color", new ColorRGBA(0.35f, 0.24f, 0.18f, 1f)); // marrom claro para listras
-        Material mPommel = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
-        mPommel.setColor("Color", new ColorRGBA(0.92f, 0.82f, 0.22f, 1f)); // dourado
+        Material mBlade = new Material(app.getAssetManager(), "Common/MatDefs/Light/Lighting.j3md");
+        mBlade.setBoolean("UseMaterialColors", false);
+        mBlade.setTexture("DiffuseMap", makeNoiseTex(64, 256, new ColorRGBA(0.88f,0.9f,0.95f,1f), 0.06f));
+        mBlade.setColor("Specular", new ColorRGBA(1f,1f,1f,1f));
+        mBlade.setFloat("Shininess", 48f);
+
+        Material mEdge = new Material(app.getAssetManager(), "Common/MatDefs/Light/Lighting.j3md");
+        mEdge.setTexture("DiffuseMap", makeNoiseTex(64, 256, new ColorRGBA(1f,1f,1f,1f), 0.03f));
+        mEdge.setColor("Specular", new ColorRGBA(1f,1f,1f,1f));
+        mEdge.setFloat("Shininess", 96f);
+
+        Material mGuard = new Material(app.getAssetManager(), "Common/MatDefs/Light/Lighting.j3md");
+        mGuard.setTexture("DiffuseMap", makeNoiseTex(64, 64, new ColorRGBA(0.96f,0.84f,0.20f,1f), 0.08f));
+        mGuard.setColor("Specular", new ColorRGBA(1f,1f,0.6f,1f));
+        mGuard.setFloat("Shininess", 32f);
+
+        Material mHandle = new Material(app.getAssetManager(), "Common/MatDefs/Light/Lighting.j3md");
+        mHandle.setTexture("DiffuseMap", makeStripedTex(32, 64, new ColorRGBA(0.13f,0.10f,0.09f,1f), new ColorRGBA(0.35f,0.24f,0.18f,1f), 6));
+        mHandle.setColor("Specular", new ColorRGBA(0.2f,0.2f,0.2f,1f));
+        mHandle.setFloat("Shininess", 8f);
+
+        Material mPommel = new Material(app.getAssetManager(), "Common/MatDefs/Light/Lighting.j3md");
+        mPommel.setTexture("DiffuseMap", makeNoiseTex(32, 32, new ColorRGBA(0.92f,0.82f,0.22f,1f), 0.07f));
+        mPommel.setColor("Specular", new ColorRGBA(1f,1f,0.6f,1f));
+        mPommel.setFloat("Shininess", 24f);
+
         Material mGem = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
-        mGem.setColor("Color", new ColorRGBA(0.15f, 0.45f, 0.95f, 1f)); // gema azul
+        mGem.setColor("Color", new ColorRGBA(0.15f, 0.45f, 0.95f, 1f)); // gema azul brilhante
 
     // Lâmina longa e fina
     float bladeHalfZ = 0.90f; // meia extensão
@@ -357,7 +406,7 @@ public class HotbarState extends BaseAppState {
     sword.attachChild(handleA);
 
     Geometry handleB = new Geometry("handleB", new Box(0.03f, 0.03f, 0.06f));
-    handleB.setMaterial(mHandleLite);
+    handleB.setMaterial(mHandle);
     handleB.setLocalTranslation(0f, -0.03f, -0.20f);
     sword.attachChild(handleB);
 
@@ -388,11 +437,54 @@ public class HotbarState extends BaseAppState {
         forearm.setLocalTranslation(0f, -0.03f, -0.48f);
         sword.attachChild(forearm);
 
+    // Nó da ponta da lâmina para rastro e colisão
+    Node tip = new Node("tip");
+    tip.setLocalTranslation(0f, 0.02f, 0.35f + bladeHalfZ + 0.02f);
+    sword.attachChild(tip);
+
         // Translate o modelo para que o punho (fist em 0,-0.03,-0.24) fique na origem do pivô (0,0,0)
         sword.setLocalTranslation(0f, 0.03f, 0.24f);
         gripPivot.attachChild(sword);
 
         return gripPivot;
+    }
+
+    private Texture2D makeNoiseTex(int w, int h, ColorRGBA base, float var) {
+        Image img = new Image(Image.Format.RGBA8, w, h, BufferUtils.createByteBuffer(w * h * 4));
+        var bb = img.getData(0);
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                float n = hash(x, y);
+                float f = 1f + var * (n - 0.5f) * 2f;
+                float r = clamp01(base.r * f);
+                float g = clamp01(base.g * f);
+                float b = clamp01(base.b * f);
+                bb.put((byte)(r * 255)).put((byte)(g * 255)).put((byte)(b * 255)).put((byte)(base.a * 255));
+            }
+        }
+        bb.flip();
+        return new Texture2D(img);
+    }
+
+    private Texture2D makeStripedTex(int w, int h, ColorRGBA a, ColorRGBA b, int stripeH) {
+        Image img = new Image(Image.Format.RGBA8, w, h, BufferUtils.createByteBuffer(w * h * 4));
+        var bb = img.getData(0);
+        for (int y = 0; y < h; y++) {
+            boolean useA = ((y / stripeH) % 2) == 0;
+            ColorRGBA c = useA ? a : b;
+            for (int x = 0; x < w; x++) {
+                bb.put((byte)(c.r * 255)).put((byte)(c.g * 255)).put((byte)(c.b * 255)).put((byte)(c.a * 255));
+            }
+        }
+        bb.flip();
+        return new Texture2D(img);
+    }
+
+    private static float hash(int x, int y) {
+        int n = x * 374761393 + y * 668265263; // números primos
+        n = (n ^ (n << 13)) * 1274126177;
+        n = n ^ (n >> 16);
+        return (n & 0x7fffffff) / (float)0x7fffffff;
     }
 
     private Geometry buildItemIcon(BlockType type) {
@@ -543,6 +635,9 @@ public class HotbarState extends BaseAppState {
             swordOffset = swordOffset.add(cam.getUp().mult(0.10f)).add(cam.getLeft().mult(-0.08f));
             swordTiltX += -0.45f; swordTiltY += -0.20f; swordTiltZ += 0.38f;
         }
+
+        // RASTRO: se estamos no meio do slash, solta segmentos seguindo a ponta
+        emitSwordTrail(tpf);
     }
 
     Vector3f pos = base.add(cam.getLeft().mult(-swayX)).add(cam.getUp().mult(swayY))
@@ -559,6 +654,47 @@ public class HotbarState extends BaseAppState {
                              baseTiltZ + swayX * 0.4f + hitTiltZ + swordTiltZ);
     rot = rot.mult(tilt);
     handNode.setLocalRotation(rot);
+    }
+
+    private void emitSwordTrail(float tpf) {
+        if (swordTipNode == null || swordPivotNode == null) return;
+        Vector3f tipWS = swordTipNode.getWorldTranslation().clone();
+        if (lastTipWS != null) {
+            Vector3f dir = tipWS.subtract(lastTipWS);
+            float len = dir.length();
+            if (len > 0.02f) { // segmento relevante
+                dir.divideLocal(len);
+                float width = 0.06f; float halfLen = len * 0.5f;
+                Geometry trail = new Geometry("sword-trail", new Box(width, width * 0.15f, halfLen));
+                Material tm = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+                tm.setColor("Color", new ColorRGBA(0.9f, 0.95f, 1f, 0.35f));
+                tm.getAdditionalRenderState().setBlendMode(RenderState.BlendMode.Additive);
+                trail.setMaterial(tm);
+                trail.setQueueBucket(RenderQueue.Bucket.Transparent);
+                trail.setLocalTranslation(lastTipWS.add(tipWS).multLocal(0.5f));
+                Quaternion q = new Quaternion();
+                q.lookAt(dir, Vector3f.UNIT_Y);
+                trail.setLocalRotation(q);
+                app.getRootNode().attachChild(trail);
+                swordTrails.add(new TrailSegment(trail, 0.18f));
+            }
+        }
+        lastTipWS = tipWS;
+
+        // Atualiza e limpa segmentos
+        for (int i = swordTrails.size() - 1; i >= 0; i--) {
+            TrailSegment s = swordTrails.get(i);
+            s.life -= tpf;
+            float a = clamp01(s.life / s.maxLife);
+            var m = s.geo.getMaterial();
+            ColorRGBA c = (ColorRGBA) m.getParam("Color").getValue();
+            m.setColor("Color", new ColorRGBA(c.r, c.g, c.b, 0.35f * a));
+            s.geo.setLocalScale(1f, 1f, a);
+            if (s.life <= 0f) {
+                s.geo.removeFromParent();
+                swordTrails.remove(i);
+            }
+        }
     }
 
     private static float clamp01(float v) { return Math.max(0f, Math.min(1f, v)); }
@@ -599,6 +735,9 @@ public class HotbarState extends BaseAppState {
             handNode.removeFromParent();
             handNode.detachAllChildren();
         }
+        // Remove quaisquer rastros remanescentes
+        for (var s : swordTrails) if (s.geo != null) s.geo.removeFromParent();
+        swordTrails.clear();
     }
 
     @Override
