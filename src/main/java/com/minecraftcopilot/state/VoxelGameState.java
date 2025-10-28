@@ -34,6 +34,7 @@ public class VoxelGameState extends BaseAppState {
     private HotbarState hotbar;
     private ChatState chat;
     private MobManager mobManager;
+    private com.minecraftcopilot.mobs.ProjectileManager projectileManager;
     private BlockInteractionState blockInteraction;
     private InventoryState inventory;
     private int worldSeed = 1337;
@@ -131,9 +132,13 @@ public class VoxelGameState extends BaseAppState {
         chat = new ChatState(chunkManager);
         getStateManager().attach(chat);
 
-        // Mobs
+    // Mobs
         mobManager = new MobManager(chunkManager);
         getStateManager().attach(mobManager);
+
+    // Projéteis (onda de espada)
+    projectileManager = new com.minecraftcopilot.mobs.ProjectileManager(chunkManager);
+    getStateManager().attach(projectileManager);
 
     // Efeito visual de água (overlay quando submerso)
     getStateManager().attach(new WaterFXState());
@@ -164,6 +169,10 @@ public class VoxelGameState extends BaseAppState {
         if (blockInteraction != null) {
             getStateManager().detach(blockInteraction);
             blockInteraction = null;
+        }
+        if (projectileManager != null) {
+            getStateManager().detach(projectileManager);
+            projectileManager = null;
         }
         if (app != null && app.getInputManager() != null) {
             app.getInputManager().setCursorVisible(true);

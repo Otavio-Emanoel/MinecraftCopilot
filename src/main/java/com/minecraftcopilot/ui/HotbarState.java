@@ -92,6 +92,7 @@ public class HotbarState extends BaseAppState {
     private boolean swordBlocking = false;
     private static final String HB_ATTACK = "HB_Attack";
     private static final String HB_DEFEND = "HB_Defend";
+    private static final String HB_POWER = "HB_Power"; // tecla F: rajada da espada
 
     public HotbarState(Material blockMaterial) {
         this.blockMaterial = blockMaterial;
@@ -212,8 +213,9 @@ public class HotbarState extends BaseAppState {
 
     im.addMapping(HB_ATTACK, new com.jme3.input.controls.MouseButtonTrigger(com.jme3.input.MouseInput.BUTTON_LEFT));
     im.addMapping(HB_DEFEND, new com.jme3.input.controls.MouseButtonTrigger(com.jme3.input.MouseInput.BUTTON_RIGHT));
+    im.addMapping(HB_POWER, new KeyTrigger(KeyInput.KEY_F));
 
-    im.addListener(actionListener, HB_1, HB_2, HB_3, HB_4, HB_5, HB_6, HB_7, HB_8, HB_9, HB_ATTACK, HB_DEFEND);
+    im.addListener(actionListener, HB_1, HB_2, HB_3, HB_4, HB_5, HB_6, HB_7, HB_8, HB_9, HB_ATTACK, HB_DEFEND, HB_POWER);
         im.addListener(analogListener, HB_NEXT, HB_PREV);
     }
 
@@ -225,6 +227,10 @@ public class HotbarState extends BaseAppState {
             return;
         } else if (HB_DEFEND.equals(name)) {
             if (isSwordSelected()) setSwordBlocking(isPressed);
+            return;
+        } else if (HB_POWER.equals(name)) {
+            if (!isSwordSelected()) return;
+            if (isPressed) startSwordPowerCharge(); else releaseSwordPowerCharge();
             return;
         } else if (isPressed) {
             switch (name) {
@@ -285,6 +291,14 @@ public class HotbarState extends BaseAppState {
         float x = startX + selected * (slotSize + slotGap);
         highlight.setLocalTranslation(x, barY, 0);
     }
+
+    // Cooldown da rajada
+    private float swordPowerCooldown = 0f;
+    // Charge da rajada (segurar F)
+    private boolean swordPowerCharging = false;
+    private float swordPowerChargeTime = 0f;
+    private final float swordPowerChargeMax = 0.8f; // ~0.8s para carga máxima
+    private Geometry swordChargeFX = null;
 
     private void rebuildHandItem() {
         if (handGeom != null) {
@@ -514,6 +528,12 @@ public class HotbarState extends BaseAppState {
 
     @Override
     public void update(float tpf) {
+        // Atualiza cooldown
+        if (swordPowerCooldown > 0f) swordPowerCooldown = Math.max(0f, swordPowerCooldown - tpf);
+        // Atualiza carga de poder
+        if (swordPowerCharging) {
+            swordPowerChargeTime = Math.min(swordPowerChargeMax, swordPowerChargeTime + tpf);
+        }
         // Posicionar o item na mão relativo à câmera (inferior direita da tela, um pouco à frente)
         var cam = app.getCamera();
         Vector3f base = cam.getLocation().add(cam.getDirection().mult(0.45f))
@@ -636,6 +656,21 @@ public class HotbarState extends BaseAppState {
             swordTiltX += -0.45f; swordTiltY += -0.20f; swordTiltZ += 0.38f;
         }
 
+        // Carga do poder: puxa a espada para trás e acumula energia na ponta
+        if (swordPowerCharging) {
+            float charge = clamp01(swordPowerChargeTime / swordPowerChargeMax);
+            swordOffset = swordOffset.add(cam.getDirection().mult(-0.10f * charge))
+                                     .add(cam.getUp().mult(0.04f * charge));
+            swordTiltX += 0.25f * charge;
+            swordTiltY += 0.10f * charge;
+            // FX de energia na ponta
+            updateSwordChargeFX(charge);
+        } else if (swordChargeFX != null) {
+            // garantir remoção caso algo cancele a carga
+            swordChargeFX.removeFromParent();
+            swordChargeFX = null;
+        }
+
         // RASTRO: se estamos no meio do slash, solta segmentos seguindo a ponta
         emitSwordTrail(tpf);
     }
@@ -711,6 +746,79 @@ public class HotbarState extends BaseAppState {
         }
     }
 
+    // Inicia a carga do poder (ao pressionar F)
+    private void startSwordPowerCharge() {
+        if (swordPowerCooldown > 0f || swordPowerCharging) return;
+        swordPowerCharging = true;
+        swordPowerChargeTime = 0f;
+        // cria FX simples na ponta
+        if (swordTipNode != null && swordChargeFX == null) {
+            swordChargeFX = new Geometry("sword-charge-fx", new Box(0.06f, 0.06f, 0.06f));
+            Material m = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+            m.setColor("Color", new ColorRGBA(0.5f, 0.8f, 1f, 0.6f));
+            m.getAdditionalRenderState().setBlendMode(RenderState.BlendMode.Additive);
+            m.getAdditionalRenderState().setFaceCullMode(RenderState.FaceCullMode.Off);
+            swordChargeFX.setMaterial(m);
+            swordChargeFX.setQueueBucket(RenderQueue.Bucket.Transparent);
+            app.getRootNode().attachChild(swordChargeFX);
+        }
+    }
+
+    // Solta a carga e dispara (ao soltar F ou auto no máximo)
+    private void releaseSwordPowerCharge() {
+        if (!swordPowerCharging) return;
+        float f = clamp01(swordPowerChargeTime / swordPowerChargeMax);
+        fireSwordWave(f);
+        // limpar FX e estado
+        if (swordChargeFX != null) { swordChargeFX.removeFromParent(); swordChargeFX = null; }
+        swordPowerCharging = false;
+        swordPowerChargeTime = 0f;
+    }
+
+    // Atualiza FX de carga na ponta
+    private void updateSwordChargeFX(float f) {
+        if (swordTipNode == null) return;
+        Vector3f tip = swordTipNode.getWorldTranslation();
+        if (swordChargeFX != null) {
+            float s = 0.10f + 0.35f * f;
+            swordChargeFX.setLocalTranslation(tip);
+            swordChargeFX.setLocalScale(s);
+            // pequeno pulso
+            var col = (ColorRGBA) swordChargeFX.getMaterial().getParam("Color").getValue();
+            float a = 0.35f + 0.45f * f * (0.75f + 0.25f * FastMath.sin(System.nanoTime() * 1e-9f * 10f));
+            swordChargeFX.getMaterial().setColor("Color", new ColorRGBA(col.r, col.g, col.b, a));
+        }
+        // auto-disparo no máximo
+        if (swordPowerChargeTime >= swordPowerChargeMax) {
+            releaseSwordPowerCharge();
+        }
+    }
+
+    // Dispara a rajada da espada (Getsuga) com fator de carga
+    private void fireSwordWave(float charge) {
+        if (swordPowerCooldown > 0f) return;
+        Vector3f origin;
+        Vector3f dir = app.getCamera().getDirection().normalize();
+        if (swordTipNode != null) origin = swordTipNode.getWorldTranslation().clone();
+        else origin = app.getCamera().getLocation().add(dir.mult(0.6f));
+
+        var pm = getStateManager().getState(com.minecraftcopilot.mobs.ProjectileManager.class);
+        if (pm != null) {
+            float f = clamp01(charge);
+            float speed = 18f + 12f * f;
+            float damage = 14f + 22f * f;
+            float outerRadius = 0.50f + 0.90f * f; // bem maior quando carregado
+            float innerRadius = outerRadius * 0.55f;
+            float arc = 2.6f + 0.3f * f; // abre um pouco mais
+            float length = outerRadius * (2.6f + 1.0f * f);
+            pm.spawnGetsugaCrescent(origin, dir, speed, damage, outerRadius, innerRadius, arc, length);
+            swordPowerCooldown = 1.2f + 0.6f * f; // maior recarga para rajadas maiores
+        }
+    }
+
+    // Compat: mantém método antigo chamando com carga média
+    private void fireSwordWave() { fireSwordWave(0.6f); }
+
     private static float clamp01(float v) { return Math.max(0f, Math.min(1f, v)); }
     private static float easeOutCubic(float t) { double u = 1.0 - t; return (float)(1.0 - u*u*u); }
     private static float easeInCubic(float t) { return t*t*t; }
@@ -735,6 +843,7 @@ public class HotbarState extends BaseAppState {
             if (im.hasMapping(HB_9)) im.deleteMapping(HB_9);
             if (im.hasMapping(HB_ATTACK)) im.deleteMapping(HB_ATTACK);
             if (im.hasMapping(HB_DEFEND)) im.deleteMapping(HB_DEFEND);
+            if (im.hasMapping(HB_POWER)) im.deleteMapping(HB_POWER);
             im.removeListener(actionListener);
             im.removeListener(analogListener);
         }
@@ -752,6 +861,7 @@ public class HotbarState extends BaseAppState {
         // Remove quaisquer rastros remanescentes
         for (var s : swordTrails) if (s.geo != null) s.geo.removeFromParent();
         swordTrails.clear();
+        if (swordChargeFX != null) { swordChargeFX.removeFromParent(); swordChargeFX = null; }
     }
 
     @Override
