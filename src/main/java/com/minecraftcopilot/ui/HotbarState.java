@@ -67,11 +67,16 @@ public class HotbarState extends BaseAppState {
 
     // Hand item
     private Node handNode;
-    private Geometry handGeom;
+    private Spatial handGeom;
 
     // Animações de ação (quebrar/colocar)
-    private float hitAnim = 0f;   // 0..1 decai no tempo
+    private float hitAnim = 0f;   // 0..1 decai no tempo (para blocos/itens comuns)
     private float placeAnim = 0f; // 0..1 decai no tempo
+    // Espada
+    private float swordAttack = 0f; // 0..1 decai no tempo
+    private boolean swordBlocking = false;
+    private static final String HB_ATTACK = "HB_Attack";
+    private static final String HB_DEFEND = "HB_Defend";
 
     public HotbarState(Material blockMaterial) {
         this.blockMaterial = blockMaterial;
@@ -92,6 +97,9 @@ public class HotbarState extends BaseAppState {
     // Disparadores de animação
     public void triggerBreakSwing() { this.hitAnim = 1f; }
     public void triggerPlaceSwing() { this.placeAnim = 1f; }
+    public void triggerSwordAttack() { this.swordAttack = 1f; }
+    public void setSwordBlocking(boolean blocking) { this.swordBlocking = blocking; }
+    public boolean isSwordSelected() { return getSelectedBlock() == BlockType.SWORD; }
 
     public void setSlot(int index, BlockType type) {
         if (index < 0 || index >= slots.length) return;
@@ -179,25 +187,36 @@ public class HotbarState extends BaseAppState {
         im.addMapping(HB_8, new KeyTrigger(KeyInput.KEY_8));
         im.addMapping(HB_9, new KeyTrigger(KeyInput.KEY_9));
 
-        im.addListener(actionListener, HB_1, HB_2, HB_3, HB_4, HB_5, HB_6, HB_7, HB_8, HB_9);
+    im.addMapping(HB_ATTACK, new com.jme3.input.controls.MouseButtonTrigger(com.jme3.input.MouseInput.BUTTON_LEFT));
+    im.addMapping(HB_DEFEND, new com.jme3.input.controls.MouseButtonTrigger(com.jme3.input.MouseInput.BUTTON_RIGHT));
+
+    im.addListener(actionListener, HB_1, HB_2, HB_3, HB_4, HB_5, HB_6, HB_7, HB_8, HB_9, HB_ATTACK, HB_DEFEND);
         im.addListener(analogListener, HB_NEXT, HB_PREV);
     }
 
     private final ActionListener actionListener = (name, isPressed, tpf) -> {
-        if (!isPressed) return;
         int before = selected;
-        switch (name) {
-            case HB_1 -> selected = 0;
-            case HB_2 -> selected = 1;
-            case HB_3 -> selected = 2;
-            case HB_4 -> selected = 3;
-            case HB_5 -> selected = 4;
-            case HB_6 -> selected = 5;
-            case HB_7 -> selected = 6;
-            case HB_8 -> selected = 7;
-            case HB_9 -> selected = 8;
+        if (HB_ATTACK.equals(name)) {
+            if (isPressed && isSwordSelected()) triggerSwordAttack();
+            // deixa BlockInteractionState cuidar de quebrar blocos quando não for espada
+            return;
+        } else if (HB_DEFEND.equals(name)) {
+            if (isSwordSelected()) setSwordBlocking(isPressed);
+            return;
+        } else if (isPressed) {
+            switch (name) {
+                case HB_1 -> selected = 0;
+                case HB_2 -> selected = 1;
+                case HB_3 -> selected = 2;
+                case HB_4 -> selected = 3;
+                case HB_5 -> selected = 4;
+                case HB_6 -> selected = 5;
+                case HB_7 -> selected = 6;
+                case HB_8 -> selected = 7;
+                case HB_9 -> selected = 8;
+            }
+            if (selected != before) onSelectionChanged();
         }
-        if (selected != before) onSelectionChanged();
     };
 
     private final AnalogListener analogListener = (name, value, tpf) -> {
@@ -254,6 +273,9 @@ public class HotbarState extends BaseAppState {
             // Mostra uma "mão" quando não há item selecionado
             handGeom = buildHandGeometry();
             handGeom.setLocalScale(1f);
+        } else if (t == BlockType.SWORD) {
+            handGeom = buildSwordModel();
+            handGeom.setLocalScale(0.7f);
         } else {
             handGeom = buildBlockGeometry(t, blockMaterial);
             handGeom.setLocalScale(0.28f);
@@ -270,6 +292,107 @@ public class HotbarState extends BaseAppState {
         m.setColor("Color", new ColorRGBA(0.96f, 0.78f, 0.64f, 1f));
         g.setMaterial(m);
         return g;
+    }
+
+    private Node buildSwordModel() {
+        // Pivot no punho: criamos um nó de pivô (gripPivot) e um nó de modelo que é transladado
+        Node gripPivot = new Node("swordPivot");
+        Node sword = new Node("swordModel");
+        // Materiais simples (cores inspiradas na imagem)
+        Material mBlade = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        mBlade.setColor("Color", new ColorRGBA(0.88f, 0.9f, 0.95f, 1f));
+        Material mEdge = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        mEdge.setColor("Color", new ColorRGBA(1f, 1f, 1f, 1f));
+        Material mGuard = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        mGuard.setColor("Color", new ColorRGBA(0.96f, 0.84f, 0.20f, 1f)); // dourado vivo
+        Material mHandle = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        mHandle.setColor("Color", new ColorRGBA(0.13f, 0.10f, 0.09f, 1f)); // marrom escuro quase preto
+        Material mHandleLite = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        mHandleLite.setColor("Color", new ColorRGBA(0.35f, 0.24f, 0.18f, 1f)); // marrom claro para listras
+        Material mPommel = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        mPommel.setColor("Color", new ColorRGBA(0.92f, 0.82f, 0.22f, 1f)); // dourado
+        Material mGem = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        mGem.setColor("Color", new ColorRGBA(0.15f, 0.45f, 0.95f, 1f)); // gema azul
+
+    // Lâmina longa e fina
+    float bladeHalfZ = 0.90f; // meia extensão
+    Geometry blade = new Geometry("blade", new Box(0.045f, 0.018f, bladeHalfZ));
+    blade.setMaterial(mBlade);
+    blade.setLocalTranslation(0f, 0.02f, 0.35f);
+    sword.attachChild(blade);
+    // Fio (bisel) levemente mais claro, sobre a lâmina
+    Geometry edge = new Geometry("edge", new Box(0.040f, 0.005f, bladeHalfZ * 0.92f));
+    edge.setMaterial(mEdge);
+    edge.setLocalTranslation(0f, 0.038f, 0.38f);
+    sword.attachChild(edge);
+
+    // Guarda central (bloco) + braços angulados (em V)
+    Geometry guardCore = new Geometry("guardCore", new Box(0.10f, 0.025f, 0.045f));
+    guardCore.setMaterial(mGuard);
+    guardCore.setLocalTranslation(0f, 0.0f, -0.05f);
+    sword.attachChild(guardCore);
+
+    Geometry guardLeft = new Geometry("guardLeft", new Box(0.16f, 0.02f, 0.035f));
+    guardLeft.setMaterial(mGuard);
+    guardLeft.setLocalTranslation(-0.14f, 0.0f, -0.05f);
+    guardLeft.setLocalRotation(new Quaternion().fromAngles(0f, 0f, 0.42f));
+    sword.attachChild(guardLeft);
+
+    Geometry guardRight = new Geometry("guardRight", new Box(0.16f, 0.02f, 0.035f));
+    guardRight.setMaterial(mGuard);
+    guardRight.setLocalTranslation(0.14f, 0.0f, -0.05f);
+    guardRight.setLocalRotation(new Quaternion().fromAngles(0f, 0f, -0.42f));
+    sword.attachChild(guardRight);
+
+    // Gema azul no centro da guarda
+    Geometry gem = new Geometry("gem", new Box(0.02f, 0.02f, 0.01f));
+    gem.setMaterial(mGem);
+    gem.setLocalTranslation(0f, 0.035f, -0.05f);
+    sword.attachChild(gem);
+
+    // Cabo com listras alternadas (3 segmentos)
+    Geometry handleA = new Geometry("handleA", new Box(0.03f, 0.03f, 0.06f));
+    handleA.setMaterial(mHandle);
+    handleA.setLocalTranslation(0f, -0.03f, -0.14f);
+    sword.attachChild(handleA);
+
+    Geometry handleB = new Geometry("handleB", new Box(0.03f, 0.03f, 0.06f));
+    handleB.setMaterial(mHandleLite);
+    handleB.setLocalTranslation(0f, -0.03f, -0.20f);
+    sword.attachChild(handleB);
+
+    Geometry handleC = new Geometry("handleC", new Box(0.03f, 0.03f, 0.06f));
+    handleC.setMaterial(mHandle);
+    handleC.setLocalTranslation(0f, -0.03f, -0.26f);
+    sword.attachChild(handleC);
+
+    // Pomo dourado simples
+    Geometry pommel = new Geometry("pommel", new Box(0.034f, 0.018f, 0.022f));
+    pommel.setMaterial(mPommel);
+    pommel.setLocalTranslation(0f, -0.03f, -0.32f);
+    sword.attachChild(pommel);
+
+    // Mão que segura (punho)
+        Material mSkin = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        mSkin.setColor("Color", new ColorRGBA(0.96f, 0.78f, 0.64f, 1f));
+        Geometry fist = new Geometry("fist", new Box(0.045f, 0.04f, 0.06f));
+        fist.setMaterial(mSkin);
+        fist.setLocalTranslation(0f, -0.03f, -0.24f);
+        sword.attachChild(fist);
+
+    // Antebraço (um pouco fora da tela, para dar a sensação de braço)
+        Material mSleeve = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        mSleeve.setColor("Color", new ColorRGBA(0.12f, 0.14f, 0.20f, 1f));
+        Geometry forearm = new Geometry("forearm", new Box(0.045f, 0.045f, 0.22f));
+        forearm.setMaterial(mSleeve);
+        forearm.setLocalTranslation(0f, -0.03f, -0.48f);
+        sword.attachChild(forearm);
+
+        // Translate o modelo para que o punho (fist em 0,-0.03,-0.24) fique na origem do pivô (0,0,0)
+        sword.setLocalTranslation(0f, 0.03f, 0.24f);
+        gripPivot.attachChild(sword);
+
+        return gripPivot;
     }
 
     private Geometry buildItemIcon(BlockType type) {
@@ -316,6 +439,8 @@ public class HotbarState extends BaseAppState {
     float decay = 6.0f; // mais alto = mais rápido
     hitAnim = Math.max(0f, hitAnim - decay * tpf);
     placeAnim = Math.max(0f, placeAnim - decay * tpf);
+    // Ataque mais cinematográfico (duração ~0.45s)
+    swordAttack = Math.max(0f, swordAttack - 2.6f * tpf);
 
     // Offsets adicionais por ação
     // Quebrar: swing para baixo e um pouco para a direita
@@ -333,16 +458,114 @@ public class HotbarState extends BaseAppState {
     Vector3f placeOffset = cam.getDirection().mult(0.06f * placeCurve * placeAnim)
         .add(cam.getLeft().mult(-0.015f * placeCurve * placeAnim));
 
+    // Animações específicas de espada
+    Vector3f swordOffset = Vector3f.ZERO;
+    float swordTiltX = 0f, swordTiltY = 0f, swordTiltZ = 0f;
+    if (isSwordSelected()) {
+        // Quando com espada, ignore swings de bloco para não bagunçar a pose
+        hitOffset = Vector3f.ZERO; hitTiltX = 0f; hitTiltZ = 0f; placeOffset = Vector3f.ZERO; placeTiltY = 0f;
+
+        // Pose de descanso: lâmina 100% vertical (Z local -> Up da câmera)
+        Vector3f restOffset = cam.getDirection().mult(0.12f)
+            .add(cam.getLeft().mult(-0.13f))
+            .add(cam.getUp().mult(0.12f));
+        // Rotação: -90° no X alinha Z->Up; Y/Z pequenos para naturalidade
+        float restTiltX = -FastMath.HALF_PI; // vertical exata
+        float restTiltY = -0.05f;            // leve giro para dentro
+        float restTiltZ = 0.10f;             // leve roll
+
+        swordOffset = swordOffset.add(restOffset);
+        swordTiltX += restTiltX;
+        swordTiltY += restTiltY;
+        swordTiltZ += restTiltZ;
+
+        // Animação de ataque: arco "anime" grande (anticipation -> slash -> follow -> settle)
+        float t = 1f - swordAttack; // 0 -> 1
+        float aDur = 0.16f, sDur = 0.18f, fDur = 0.07f, zDur = 0.08f; // total ~0.49
+        float a = clamp01(t / aDur);
+        float s = clamp01((t - aDur) / sDur);
+        float f = clamp01((t - aDur - sDur) / fDur);
+        float z = clamp01((t - aDur - sDur - fDur) / zDur);
+        float aE = easeInOutCubic(a);
+        float sE = easeOutCubic(s);
+        float fE = easeOutCubic(f);
+        float zE = easeInCubic(z);
+
+        // Anticipation: carrega para cima/direita e gira a lâmina para trás
+        swordOffset = swordOffset.add(
+            cam.getUp().mult(0.08f * aE)
+                .add(cam.getLeft().mult(0.10f * aE))
+        );
+        swordTiltX += 0.55f * aE;   // recua a ponta
+        swordTiltY += 0.18f * aE;   // gira para dentro
+        swordTiltZ += -0.25f * aE;  // roll opositor
+
+        // Slash: arco enorme cruzando a tela para baixo/esquerda com avanço
+        swordOffset = swordOffset.add(
+            cam.getDirection().mult(0.45f * sE)
+                .add(cam.getLeft().mult(-0.30f * sE))
+                .add(cam.getUp().mult(-0.22f * sE))
+        );
+        swordTiltX += -1.80f * sE;  // grande pitch para frente
+        swordTiltY += -1.05f * sE;  // grande yaw levando para esquerda
+        swordTiltZ += 0.65f * sE;   // roll para dar drama
+
+        // Impact jolt: pequeno tremor no ápice do corte
+        float impact = (s > 0.85f && s < 1.0f) ? (s - 0.85f) / 0.15f : 0f;
+        if (impact > 0f) {
+            float k = 0.04f * (1f - impact);
+            swordOffset = swordOffset.add(cam.getUp().mult(-k)).add(cam.getLeft().mult(k * 0.5f));
+            swordTiltZ += 0.12f * (1f - impact);
+        }
+
+        // Follow-through: continua um pouco e começa a diminuir a rotação
+        swordOffset = swordOffset.add(
+            cam.getDirection().mult(0.08f * fE)
+                .add(cam.getLeft().mult(-0.05f * fE))
+                .add(cam.getUp().mult(-0.03f * fE))
+        );
+        swordTiltX += -0.35f * fE;
+        swordTiltY += -0.25f * fE;
+        swordTiltZ += 0.18f * fE;
+
+        // Settle: retorna em direção à pose de descanso
+        swordOffset = swordOffset.add(
+            cam.getDirection().mult(-0.22f * zE)
+                .add(cam.getUp().mult(0.10f * zE))
+                .add(cam.getLeft().mult(0.06f * zE))
+        );
+        swordTiltX += 0.95f * zE;
+        swordTiltY += 0.60f * zE;
+        swordTiltZ += -0.40f * zE;
+
+        if (swordBlocking) {
+            // Defesa: eleva mais e gira para dentro; reduz efeito do swing
+            swordOffset = swordOffset.add(cam.getUp().mult(0.10f)).add(cam.getLeft().mult(-0.08f));
+            swordTiltX += -0.45f; swordTiltY += -0.20f; swordTiltZ += 0.38f;
+        }
+    }
+
     Vector3f pos = base.add(cam.getLeft().mult(-swayX)).add(cam.getUp().mult(swayY))
-        .add(hitOffset).add(placeOffset);
+        .add(hitOffset).add(placeOffset).add(swordOffset);
     handNode.setLocalTranslation(pos);
 
+    // Base tilt diferente para espada: removemos inclinações default para respeitar a verticalidade
+    float baseTiltX = -0.25f, baseTiltY = 0.35f, baseTiltZ = 0.15f;
+    if (isSwordSelected()) { baseTiltX = 0f; baseTiltY = 0f; baseTiltZ = 0f; }
+
     Quaternion rot = cam.getRotation().clone();
-    Quaternion tilt = new Quaternion().fromAngles(-0.25f + swayY * 0.7f + hitTiltX,
-                             0.35f + swayX * 0.8f + placeTiltY,
-                             0.15f + swayX * 0.4f + hitTiltZ);
+    Quaternion tilt = new Quaternion().fromAngles(baseTiltX + swayY * 0.7f + hitTiltX + swordTiltX,
+                             baseTiltY + swayX * 0.8f + placeTiltY + swordTiltY,
+                             baseTiltZ + swayX * 0.4f + hitTiltZ + swordTiltZ);
     rot = rot.mult(tilt);
     handNode.setLocalRotation(rot);
+    }
+
+    private static float clamp01(float v) { return Math.max(0f, Math.min(1f, v)); }
+    private static float easeOutCubic(float t) { double u = 1.0 - t; return (float)(1.0 - u*u*u); }
+    private static float easeInCubic(float t) { return t*t*t; }
+    private static float easeInOutCubic(float t) {
+        return t < 0.5f ? 4f * t * t * t : 1f - (float)Math.pow(-2f * t + 2f, 3) / 2f;
     }
 
     @Override
@@ -360,6 +583,8 @@ public class HotbarState extends BaseAppState {
             if (im.hasMapping(HB_7)) im.deleteMapping(HB_7);
             if (im.hasMapping(HB_8)) im.deleteMapping(HB_8);
             if (im.hasMapping(HB_9)) im.deleteMapping(HB_9);
+            if (im.hasMapping(HB_ATTACK)) im.deleteMapping(HB_ATTACK);
+            if (im.hasMapping(HB_DEFEND)) im.deleteMapping(HB_DEFEND);
             im.removeListener(actionListener);
             im.removeListener(analogListener);
         }

@@ -61,6 +61,11 @@ public class BlockInteractionState extends BaseAppState {
             if (!isPressed) return;
             if (MAP_BREAK.equals(name) && hasSelection) {
                 // Quebrar o bloco selecionado
+                // Se item selecionado é espada, não quebrar blocos (usa animação de ataque)
+                if (hotbar != null && hotbar.getSelectedBlock() == BlockType.SWORD) {
+                    // animação de ataque já é disparada pelo HotbarState; aqui só ignoramos a quebra
+                    return;
+                }
                 chunkManager.setBlockAtWorld(selWx, selWy, selWz, BlockType.AIR);
                 // Notifica água ao redor para reagir
                 for (int dx = -1; dx <= 1; dx++)
@@ -76,6 +81,10 @@ public class BlockInteractionState extends BaseAppState {
             } else if ("BI_Place".equals(name) && hasSelection && hotbar != null) {
                 BlockType toPlace = hotbar.getSelectedBlock();
                 if (toPlace != null && toPlace != BlockType.AIR && lastHitContact != null && lastRayDir != null) {
+                    if (toPlace == BlockType.SWORD) {
+                        // Espada: botão direito = defender (já tratado pelo HotbarState); não colocar blocos
+                        return;
+                    }
                     Vector3f outside = lastHitContact.subtract(lastRayDir.mult(1e-3f));
                     int pwx = (int) Math.floor(outside.x);
                     int pwy = (int) Math.floor(outside.y);

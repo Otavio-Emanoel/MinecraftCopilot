@@ -20,6 +20,11 @@ public enum BlockType {
     DEVFEST(8, new ColorRGBA(0.9f, 0.85f, 0.3f, 1f), 11, 11, 11) {
         @Override public boolean isSolid() { return false; }
         @Override public boolean isBlocking() { return false; }
+    },
+    // Espada (item): não sólido, não bloqueante; possui modelo 3D próprio na mão
+    SWORD(9, new ColorRGBA(1f, 1f, 1f, 1f), 12, 12, 12) {
+        @Override public boolean isSolid() { return false; }
+        @Override public boolean isBlocking() { return false; }
     };
 
     public final byte id;

@@ -33,7 +33,7 @@ public class TextureAtlas {
     private void buildDefaultTiles() {
         // Indices:
         // 0 grass_top, 1 grass_side, 2 dirt, 3 stone, 4 log_side, 5 log_top, 6 leaves,
-        // 7 water_f0, 8 water_f1, 9 water_f2, 10 egg_item, 11 devfest_item
+        // 7 water_f0, 8 water_f1, 9 water_f2, 10 egg_item, 11 devfest_item, 12 sword_item
         drawGrassTop(0);
         drawGrassSide(1);
         drawDirt(2);
@@ -48,6 +48,8 @@ public class TextureAtlas {
         drawEgg(10);
         // Ícone DevFest
         drawDevFest(11);
+        // Ícone da Espada
+        drawSword(12);
     }
 
     private void drawGrassTop(int idx) {
@@ -258,6 +260,32 @@ public class TextureAtlas {
         g.fillRect(xF, pad, Math.max(2, w/5), h);
         g.fillRect(xF, pad, w, Math.max(2, h/5));
         g.fillRect(xF, pad + h/2 - Math.max(1, h/12), (int)(w*0.75), Math.max(2, h/5));
+        g.dispose();
+    }
+
+    private void drawSword(int idx) {
+        int x0 = idx * tileSize;
+        Graphics2D g = atlas.createGraphics();
+        // fundo translúcido escuro
+        g.setComposite(AlphaComposite.SrcOver);
+        g.setColor(new Color(15, 17, 22, 220));
+        g.fillRect(x0, 0, tileSize, tileSize);
+        // lâmina
+        int cx = x0 + tileSize/2;
+        g.setColor(new Color(220, 220, 225));
+        g.fillPolygon(new int[]{cx-2, cx+6, cx+10, cx+2}, new int[]{3, 7, tileSize-5, tileSize-9}, 4);
+        // fio da lâmina
+        g.setColor(new Color(255, 255, 255));
+        g.drawLine(cx+6, 7, cx+9, tileSize-6);
+        // guarda
+        g.setColor(new Color(180, 160, 50));
+        g.fillRect(cx-6, tileSize-12, 12, 3);
+        // cabo
+        g.setColor(new Color(25, 30, 45));
+        g.fillRect(cx-2, tileSize-12, 4, 10);
+        // pomo
+        g.setColor(new Color(200, 40, 40));
+        g.fillRect(cx-2, tileSize-2, 4, 2);
         g.dispose();
     }
 
