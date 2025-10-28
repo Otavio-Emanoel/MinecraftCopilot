@@ -33,7 +33,7 @@ public class TextureAtlas {
     private void buildDefaultTiles() {
         // Indices:
         // 0 grass_top, 1 grass_side, 2 dirt, 3 stone, 4 log_side, 5 log_top, 6 leaves,
-        // 7 water_f0, 8 water_f1, 9 water_f2, 10 egg_item, 11 devfest_item, 12 sword_item
+        // 7 water_f0, 8 water_f1, 9 water_f2, 10 egg_item, 11 devfest_item, 12 sword_item, 13 dummy_item
         drawGrassTop(0);
         drawGrassSide(1);
         drawDirt(2);
@@ -50,6 +50,8 @@ public class TextureAtlas {
         drawDevFest(11);
         // Ícone da Espada
         drawSword(12);
+        // Ícone do Boneco de Treino
+        drawDummy(13);
     }
 
     private void drawGrassTop(int idx) {
@@ -286,6 +288,43 @@ public class TextureAtlas {
         // pomo
         g.setColor(new Color(200, 40, 40));
         g.fillRect(cx-2, tileSize-2, 4, 2);
+        g.dispose();
+    }
+
+    private void drawDummy(int idx) {
+        int x0 = idx * tileSize;
+        Graphics2D g = atlas.createGraphics();
+        // fundo translúcido para destacar o ícone
+        g.setComposite(AlphaComposite.SrcOver);
+        g.setColor(new Color(15, 17, 22, 200));
+        g.fillRect(x0, 0, tileSize, tileSize);
+
+        // Silhueta do boneco de treino (madeira)
+        Color wood = new Color(140, 110, 75);
+        Color dark = new Color(95, 75, 50);
+        int pad = Math.max(2, tileSize/10);
+        int cx = x0 + tileSize/2;
+
+        // Tronco
+        g.setColor(wood);
+        g.fillRoundRect(cx - tileSize/10, pad + tileSize/6, tileSize/5, tileSize/2, 4, 4);
+
+        // Cabeça
+        g.setColor(wood);
+        g.fillOval(cx - tileSize/8, pad, tileSize/4, tileSize/4);
+        // Olhos simples
+        g.setColor(dark);
+        g.fillRect(cx - tileSize/20, pad + tileSize/12, 2, 2);
+        g.fillRect(cx + tileSize/20 - 2, pad + tileSize/12, 2, 2);
+
+        // Braços em T
+        g.setColor(wood);
+        g.fillRoundRect(cx - tileSize/3, pad + tileSize/3, (int)(2*tileSize/3.0), tileSize/10, 3, 3);
+
+        // Base/suporte
+        g.setColor(dark);
+        g.fillRect(cx - tileSize/6, pad + (int)(tileSize*0.75), tileSize/3, tileSize/12);
+
         g.dispose();
     }
 

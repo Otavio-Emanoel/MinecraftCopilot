@@ -78,7 +78,7 @@ public class VoxelGameState extends BaseAppState {
         this.chunkMaterialSolid = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
         this.chunkMaterialSolid.setBoolean("VertexColor", true);
     // Aumenta quantidade de tiles para incluir tronco/folhas/água animada (3 frames)
-    TextureAtlas atlas = new TextureAtlas(16, 13);
+    TextureAtlas atlas = new TextureAtlas(16, 14);
     Chunk.ATLAS = atlas;
     var tex = atlas.buildTexture(app.getAssetManager());
     this.chunkMaterialSolid.setTexture("ColorMap", tex);

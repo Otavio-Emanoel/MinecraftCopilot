@@ -25,6 +25,11 @@ public enum BlockType {
     SWORD(9, new ColorRGBA(1f, 1f, 1f, 1f), 12, 12, 12) {
         @Override public boolean isSolid() { return false; }
         @Override public boolean isBlocking() { return false; }
+    },
+    // Boneco de treino (item): não sólido, não bloqueante; ao colocar, spawna um TrainingDummy
+    DUMMY(10, new ColorRGBA(0.55f, 0.43f, 0.30f, 1f), 13, 13, 13) {
+        @Override public boolean isSolid() { return false; }
+        @Override public boolean isBlocking() { return false; }
     };
 
     public final byte id;

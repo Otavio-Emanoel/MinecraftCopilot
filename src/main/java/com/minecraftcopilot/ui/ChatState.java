@@ -246,6 +246,17 @@ public class ChatState extends BaseAppState {
             Vector3f camDir = app.getCamera().getDirection().clone();
             DevFestBuilder.placeDevFest(chunkManager, camPos, camDir);
             addMessage("[Sistema] DevFest instalado! 🎉");
+        } else if (c.equals("dummy") || c.equals("boneco")) {
+            var mm = getStateManager().getState(com.minecraftcopilot.mobs.MobManager.class);
+            if (mm != null) {
+                Vector3f camPos = app.getCamera().getLocation().clone();
+                Vector3f camDir = app.getCamera().getDirection().normalize();
+                Vector3f p = camPos.add(camDir.mult(3.0f));
+                mm.spawnTrainingDummy(p);
+                addMessage("[Sistema] Boneco de treino criado.");
+            } else {
+                addMessage("[Sistema] MobManager indisponível.");
+            }
         } else {
             addMessage("[Sistema] Comando desconhecido: /" + cmd);
         }

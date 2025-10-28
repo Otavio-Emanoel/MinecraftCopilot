@@ -109,6 +109,13 @@ public class BlockInteractionState extends BaseAppState {
                                 Vector3f spawn = new Vector3f(pwx + 0.5f, pwy + 1.0f, pwz + 0.5f);
                                 mm.spawnEgg(spawn);
                             }
+                        } else if (toPlace == BlockType.DUMMY) {
+                            // Boneco de treino: spawna entidade estática, não coloca bloco
+                            MobManager mm = getStateManager().getState(MobManager.class);
+                            if (mm != null) {
+                                Vector3f spawn = new Vector3f(pwx + 0.5f, pwy + 1.0f, pwz + 0.5f);
+                                mm.spawnTrainingDummy(spawn);
+                            }
                         } else if (toPlace == BlockType.DEVFEST) {
                             // Dispara o builder do letreiro próximo ao jogador
                             DevFestBuilder.placeDevFest(chunkManager, app.getCamera().getLocation(), app.getCamera().getDirection().normalize());

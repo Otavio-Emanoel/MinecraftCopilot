@@ -677,6 +677,13 @@ public class HotbarState extends BaseAppState {
                 trail.setLocalRotation(q);
                 app.getRootNode().attachChild(trail);
                 swordTrails.add(new TrailSegment(trail, 0.18f));
+
+                // HIT DETECTION: aplica dano nos mobs ao varrer o segmento
+                var mm = getStateManager().getState(com.minecraftcopilot.mobs.MobManager.class);
+                if (mm != null) {
+                    float baseDmg = Math.min(12f, len * 60f); // quanto mais rápido o movimento, maior dano
+                    mm.applySwordSweep(lastTipWS.clone(), tipWS.clone(), 0.18f, baseDmg, dir.clone());
+                }
             }
         }
         lastTipWS = tipWS;

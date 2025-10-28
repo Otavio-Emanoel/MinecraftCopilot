@@ -24,6 +24,8 @@ public class MobManager extends BaseAppState {
     private final List<SimpleMob> mobs = new ArrayList<>();
     private final Random rng = new Random(12345);
     private final List<EggEntity> eggs = new ArrayList<>();
+    // hits de espada (temporário)
+    private long lastSweepFrame = 0;
 
     public MobManager(ChunkManager cm) {
         this.chunkManager = cm;
@@ -106,6 +108,49 @@ public class MobManager extends BaseAppState {
         e.setLocalTranslation(p);
         mobRoot.attachChild(e);
         eggs.add(e);
+    }
+
+    public void spawnTrainingDummy(Vector3f worldPos) {
+        Vector3f p = worldPos.clone();
+        p.y = groundYAt(p.x, p.z, p.y) + 1.001f;
+        TrainingDummy d = new TrainingDummy(app.getAssetManager());
+        d.setLocalTranslation(p);
+        mobRoot.attachChild(d);
+        mobs.add(d);
+    }
+
+    /**
+     * Varre um segmento (ponta da espada) e aplica dano aos mobs que colidirem com um raio dado.
+     * Retorna quantos foram atingidos.
+     */
+    public int applySwordSweep(Vector3f from, Vector3f to, float sweepRadius, float damage, Vector3f knockDir) {
+        if (from == null || to == null) return 0;
+        Vector3f seg = to.subtract(from);
+        float segLenSq = seg.lengthSquared();
+        if (segLenSq < 1e-6f) return 0;
+        int hits = 0;
+        for (SimpleMob m : new ArrayList<>(mobs)) {
+            if (!m.isAlive()) continue;
+            Vector3f mp = m.getWorldTranslation();
+            // ponto mais próximo do centro do mob no segmento
+            float t = (mp.subtract(from)).dot(seg) / segLenSq;
+            if (t < 0f) t = 0f; else if (t > 1f) t = 1f;
+            Vector3f cp = from.add(seg.mult(t));
+            // Checa altura
+            float minY = mp.y;
+            float maxY = mp.y + m.height; // usa campo protegido; mesma classe acessa
+            if (cp.y < minY - 0.2f || cp.y > maxY + 0.2f) continue;
+            // Distância horizontal do cp ao centro do mob
+            float dx = cp.x - mp.x;
+            float dz = cp.z - mp.z;
+            float horiz = FastMath.sqrt(dx*dx + dz*dz);
+            if (horiz <= (m.radius + sweepRadius)) {
+                m.damage(damage);
+                if (knockDir != null) m.kick(knockDir.mult(2.2f));
+                hits++;
+            }
+        }
+        return hits;
     }
 
     // Partículas simples de "casca" estourando (sem assets externos)
