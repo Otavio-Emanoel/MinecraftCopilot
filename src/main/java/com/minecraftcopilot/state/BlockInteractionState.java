@@ -284,7 +284,7 @@ public class BlockInteractionState extends BaseAppState {
         // Se item selecionado é espada ou arco, não quebrar blocos (usa lógica própria)
         if (hotbar != null) {
             BlockType sel = hotbar.getSelectedBlock();
-            if (sel == BlockType.SWORD || sel == BlockType.BOW) return;
+            if (sel == BlockType.SWORD || sel == BlockType.SWORD2 || sel == BlockType.BOW) return;
         }
 
         // emite partículas e remove bloco
@@ -307,7 +307,7 @@ public class BlockInteractionState extends BaseAppState {
         if (!hasSelection || hotbar == null) return;
         BlockType toPlace = hotbar.getSelectedBlock();
         if (toPlace == null || toPlace == BlockType.AIR || lastHitContact == null || lastRayDir == null) return;
-    if (toPlace == BlockType.SWORD || toPlace == BlockType.BOW || toPlace == BlockType.ARROW) return; // não coloca itens de arma/munição
+    if (toPlace == BlockType.SWORD || toPlace == BlockType.SWORD2 || toPlace == BlockType.BOW || toPlace == BlockType.ARROW) return; // não coloca itens de arma/munição
 
         Vector3f outside = lastHitContact.subtract(lastRayDir.mult(1e-3f));
         int pwx = (int) Math.floor(outside.x);

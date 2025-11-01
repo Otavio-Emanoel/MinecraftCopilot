@@ -96,7 +96,7 @@ public class InventoryState extends BaseAppState {
         guiRoot.attachChild(tip);
 
         // Grid de itens com ícones (3x9)
-    BlockType[] available = new BlockType[]{ BlockType.GRASS, BlockType.DIRT, BlockType.STONE, BlockType.WOOD, BlockType.LEAVES, BlockType.WATER, BlockType.EGG, BlockType.DEVFEST, BlockType.SWORD, BlockType.DUMMY, BlockType.BOW, BlockType.ARROW };
+    BlockType[] available = new BlockType[]{ BlockType.GRASS, BlockType.DIRT, BlockType.STONE, BlockType.WOOD, BlockType.LEAVES, BlockType.WATER, BlockType.EGG, BlockType.DEVFEST, BlockType.SWORD, BlockType.SWORD2, BlockType.DUMMY, BlockType.BOW, BlockType.ARROW };
         float gridW = cols * slotSize + (cols - 1) * slotGap;
         gridStartX = (w - gridW) / 2f;
         gridStartY = h * 0.6f;

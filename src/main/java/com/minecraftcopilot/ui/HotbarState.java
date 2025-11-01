@@ -96,6 +96,8 @@ public class HotbarState extends BaseAppState {
     private float placeAnim = 0f; // 0..1 decai no tempo
     // Espada
     private float swordAttack = 0f; // 0..1 decai no tempo
+    private boolean swordSwingLeft = true; // alterna direção do giro horizontal
+    private float swordSweepScale = 0f;    // intensificador do rastro/dano durante o sweep
     private boolean swordBlocking = false;
     private static final String HB_ATTACK = "HB_Attack";
     private static final String HB_DEFEND = "HB_Defend";
@@ -120,9 +122,12 @@ public class HotbarState extends BaseAppState {
     // Disparadores de animação
     public void triggerBreakSwing() { this.hitAnim = 1f; }
     public void triggerPlaceSwing() { this.placeAnim = 1f; }
-    public void triggerSwordAttack() { this.swordAttack = 1f; }
+    public void triggerSwordAttack() { this.swordAttack = 1f; this.swordSwingLeft = !this.swordSwingLeft; }
     public void setSwordBlocking(boolean blocking) { this.swordBlocking = blocking; }
-    public boolean isSwordSelected() { return getSelectedBlock() == BlockType.SWORD; }
+    public boolean isSwordSelected() {
+        BlockType t = getSelectedBlock();
+        return t == BlockType.SWORD || t == BlockType.SWORD2;
+    }
     public boolean isBowSelected() { return getSelectedBlock() == BlockType.BOW; }
 
     public void setSlot(int index, BlockType type) {
@@ -339,6 +344,14 @@ public class HotbarState extends BaseAppState {
                 swordModelNode = (Node) n.getChild("swordModel");
                 if (swordModelNode != null) swordTipNode = (Node) swordModelNode.getChild("tip");
             }
+        } else if (t == BlockType.SWORD2) {
+            handGeom = buildExternalSwordModel();
+            handGeom.setLocalScale(0.7f);
+            if (handGeom instanceof Node n) {
+                swordPivotNode = n;
+                swordModelNode = (Node) n.getChild("swordModel");
+                if (swordModelNode != null) swordTipNode = (Node) swordModelNode.getChild("tip");
+            }
         } else if (t == BlockType.BOW) {
             handGeom = buildBowModel();
             handGeom.setLocalScale(1.1f);
@@ -481,6 +494,113 @@ public class HotbarState extends BaseAppState {
         return gripPivot;
     }
 
+    // Carrega uma espada externa do assets e adapta para nosso pivô/FX
+    private Node buildExternalSwordModel() {
+        Node gripPivot = new Node("swordPivot");
+        Node sword = new Node("swordModel");
+        Spatial loaded = null;
+        // Tenta diferentes formatos/caminhos comuns
+    String[] candidates = new String[]{
+        // Prioriza a pasta registrada via FileLocator("src/main/Models")
+        // Formatos suportados: OBJ e glTF (glTF via jme3-plugins)
+        "Swords/93-sword/obj/zambuzoSword.obj",
+        "Swords/93-sword/zambuzoSword.glb",
+        "Swords/93-sword/zambuzoSword.gltf",
+        // Se existir apenas Collada (.dae), será preciso converter para glTF/OBJ
+        // Fallbacks com prefixo Models/ caso o locator não esteja presente
+        "Models/Swords/93-sword/obj/zambuzoSword.obj",
+        "Models/Swords/93-sword/zambuzoSword.glb",
+        "Models/Swords/93-sword/zambuzoSword.gltf"
+    };
+        for (String path : candidates) {
+            try {
+                System.out.println("[SWORD2] tentando carregar modelo: " + path);
+                loaded = app.getAssetManager().loadModel(path);
+                System.out.println("[SWORD2] carregado: " + path);
+                break;
+            } catch (Exception ex) {
+                System.out.println("[SWORD2] falhou: " + path + " -> " + ex.getMessage());
+            }
+        }
+        if (loaded == null) {
+            // fallback para modelo procedural se não achar
+            System.out.println("[SWORD2] fallback para modelo procedural");
+            return buildSwordModel();
+        }
+        sword.attachChild(loaded);
+
+        // Normaliza orientação/escala/posição do modelo carregado
+        // 1) Escala pela maior dimensão para ~1.8m de comprimento (similar à espada procedural)
+        loaded.updateModelBound();
+        var bound = loaded.getWorldBound();
+        float maxDim = 1f;
+        if (bound instanceof com.jme3.bounding.BoundingBox bb0) {
+            float x = bb0.getXExtent()*2f;
+            float y = bb0.getYExtent()*2f;
+            float z = bb0.getZExtent()*2f;
+            maxDim = Math.max(x, Math.max(y, z));
+        }
+    // Para modelos externos, use um comprimento um pouco menor para não ocupar a tela
+    float target = 1.2f;
+        float scale = (maxDim > 0.0001f) ? (target / maxDim) : 1f;
+        loaded.setLocalScale(scale);
+
+        // 2) Converter Z_UP (SketchUp) para Y_UP (jME): rotaciona -90° no eixo X
+        loaded.rotate(-FastMath.HALF_PI, 0f, 0f);
+
+        // 3) Alinhar o eixo mais longo ao +Z (lâmina apontando para frente)
+        loaded.updateModelBound();
+        if (loaded.getWorldBound() instanceof com.jme3.bounding.BoundingBox bb1) {
+            float ex = bb1.getXExtent();
+            float ey = bb1.getYExtent();
+            float ez = bb1.getZExtent();
+            if (ex >= ey && ex >= ez) {
+                // Maior no X -> rotaciona X->Z
+                loaded.rotate(0f, FastMath.HALF_PI, 0f);
+            } else if (ey >= ex && ey >= ez) {
+                // Maior no Y -> rotaciona Y->Z
+                loaded.rotate(-FastMath.HALF_PI, 0f, 0f);
+            }
+        }
+
+        // 4) Centralizar o modelo no pivô: traz o centro geométrico para (0,0,0)
+        loaded.updateModelBound();
+        if (loaded.getWorldBound() instanceof com.jme3.bounding.BoundingBox bb2) {
+            var center = bb2.getCenter();
+            loaded.setLocalTranslation(loaded.getLocalTranslation().subtract(center));
+        }
+
+        // 5) Nó "tip" na ponta (Z+). Usa o bound atual já centralizado.
+        loaded.updateModelBound();
+        Node tip = new Node("tip");
+        float tipZ = 1.0f;
+        if (loaded.getWorldBound() instanceof com.jme3.bounding.BoundingBox bb3) {
+            tipZ = bb3.getZExtent() + 0.25f; // um pouco além da ponta
+        }
+        tip.setLocalTranslation(0f, 0.0f, tipZ);
+        sword.attachChild(tip);
+
+        // Fist/forearm simples para manter consistência visual
+        Material mSkin = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        mSkin.setColor("Color", new ColorRGBA(0.96f, 0.78f, 0.64f, 1f));
+        Geometry fist = new Geometry("fist", new Box(0.045f, 0.04f, 0.06f));
+        fist.setMaterial(mSkin);
+        fist.setLocalTranslation(0f, -0.03f, -0.24f);
+        sword.attachChild(fist);
+        Material mSleeve = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        mSleeve.setColor("Color", new ColorRGBA(0.12f, 0.14f, 0.20f, 1f));
+        Geometry forearm = new Geometry("forearm", new Box(0.045f, 0.045f, 0.22f));
+        forearm.setMaterial(mSleeve);
+        forearm.setLocalTranslation(0f, -0.03f, -0.48f);
+        sword.attachChild(forearm);
+
+    // Offset igual ao procedural para manter a empunhadura no pivô
+    // Como centralizamos o modelo no (0,0,0), posicionamos o conjunto para que a mão (y=-0.03,z=-0.24) fique na origem
+    sword.setLocalTranslation(0f, 0.03f, 0.24f);
+        gripPivot.attachChild(sword);
+        return gripPivot;
+    }
+
     private Texture2D makeNoiseTex(int w, int h, ColorRGBA base, float var) {
         Image img = new Image(Image.Format.RGBA8, w, h, BufferUtils.createByteBuffer(w * h * 4));
         var bb = img.getData(0);
@@ -572,8 +692,10 @@ public class HotbarState extends BaseAppState {
     float decay = 6.0f; // mais alto = mais rápido
     hitAnim = Math.max(0f, hitAnim - decay * tpf);
     placeAnim = Math.max(0f, placeAnim - decay * tpf);
-    // Ataque mais cinematográfico (duração ~0.45s)
-    swordAttack = Math.max(0f, swordAttack - 2.6f * tpf);
+    // Ataque horizontal de meia-volta (~0.60s)
+    swordAttack = Math.max(0f, swordAttack - 1.67f * tpf);
+    // Decaimento do reforço de sweep
+    swordSweepScale = Math.max(0f, swordSweepScale - 5.0f * tpf);
 
     // Offsets adicionais por ação
     // Quebrar: swing para baixo e um pouco para a direita
@@ -599,9 +721,10 @@ public class HotbarState extends BaseAppState {
         hitOffset = Vector3f.ZERO; hitTiltX = 0f; hitTiltZ = 0f; placeOffset = Vector3f.ZERO; placeTiltY = 0f;
 
         // Pose de descanso: lâmina 100% vertical (Z local -> Up da câmera)
-        Vector3f restOffset = cam.getDirection().mult(0.12f)
-            .add(cam.getLeft().mult(-0.13f))
-            .add(cam.getUp().mult(0.12f));
+        // Mais recuada e um pouco mais à direita para não ocupar muito a tela
+        Vector3f restOffset = cam.getDirection().mult(0.06f)
+            .add(cam.getLeft().mult(-0.18f))
+            .add(cam.getUp().mult(0.08f));
         // Rotação: -90° no X alinha Z->Up; Y/Z pequenos para naturalidade
         float restTiltX = -FastMath.HALF_PI; // vertical exata
         float restTiltY = -0.05f;            // leve giro para dentro
@@ -612,64 +735,56 @@ public class HotbarState extends BaseAppState {
         swordTiltY += restTiltY;
         swordTiltZ += restTiltZ;
 
-        // Animação de ataque: arco "anime" grande (anticipation -> slash -> follow -> settle)
-        float t = 1f - swordAttack; // 0 -> 1
-        float aDur = 0.16f, sDur = 0.18f, fDur = 0.07f, zDur = 0.08f; // total ~0.49
+    // Animação de ataque: giro horizontal de meia-volta (anticipation -> sweep 180° -> settle)
+    float t = 1f - swordAttack; // 0 -> 1
+    float aDur = 0.12f, sweepDur = 0.32f, settleDur = 0.16f; // total ~0.60s
         float a = clamp01(t / aDur);
-        float s = clamp01((t - aDur) / sDur);
-        float f = clamp01((t - aDur - sDur) / fDur);
-        float z = clamp01((t - aDur - sDur - fDur) / zDur);
-        float aE = easeInOutCubic(a);
-        float sE = easeOutCubic(s);
-        float fE = easeOutCubic(f);
+        float s = clamp01((t - aDur) / sweepDur);
+        float z = clamp01((t - aDur - sweepDur) / settleDur);
+    float aE = easeInOutCubic(a);
+    float sE = easeInOutCubic(s);
         float zE = easeInCubic(z);
 
-        // Anticipation: carrega para cima/direita e gira a lâmina para trás
+        // Anticipation: puxa para trás e para a direita; prepara yaw positivo
         swordOffset = swordOffset.add(
-            cam.getUp().mult(0.08f * aE)
+            cam.getDirection().mult(-0.08f * aE)
                 .add(cam.getLeft().mult(0.10f * aE))
+                .add(cam.getUp().mult(0.05f * aE))
         );
-        swordTiltX += 0.55f * aE;   // recua a ponta
-        swordTiltY += 0.18f * aE;   // gira para dentro
-        swordTiltZ += -0.25f * aE;  // roll opositor
+        swordTiltX += 0.25f * aE;
+        swordTiltY += 0.35f * aE; // pré-giro
+        swordTiltZ += -0.10f * aE;
 
-        // Slash: arco enorme cruzando a tela para baixo/esquerda com avanço
+        // Sweep: yaw percorre de +/−110° para ∓70° em torno do eixo vertical do jogador
+        float dir = swordSwingLeft ? 1f : -1f; // true: direita->esquerda, false: esquerda->direita
+        float yawStart = dir * FastMath.DEG_TO_RAD * 110f;   // início mais aberto
+        float yawEnd   = -dir * FastMath.DEG_TO_RAD * 70f;   // termina um pouco antes do oposto
+        float yawNow   = FastMath.interpolateLinear(sE, yawStart, yawEnd);
+        swordTiltY += yawNow; // aplica o giro horizontal
+        // Pequeno arco para frente/baixo durante o giro
         swordOffset = swordOffset.add(
-            cam.getDirection().mult(0.45f * sE)
-                .add(cam.getLeft().mult(-0.30f * sE))
-                .add(cam.getUp().mult(-0.22f * sE))
+            cam.getDirection().mult(0.28f * sE)
+                .add(cam.getLeft().mult(-0.18f * sE * dir))
+                .add(cam.getUp().mult(-0.10f * sE))
         );
-        swordTiltX += -1.80f * sE;  // grande pitch para frente
-        swordTiltY += -1.05f * sE;  // grande yaw levando para esquerda
-        swordTiltZ += 0.65f * sE;   // roll para dar drama
 
-        // Impact jolt: pequeno tremor no ápice do corte
-        float impact = (s > 0.85f && s < 1.0f) ? (s - 0.85f) / 0.15f : 0f;
-        if (impact > 0f) {
-            float k = 0.04f * (1f - impact);
-            swordOffset = swordOffset.add(cam.getUp().mult(-k)).add(cam.getLeft().mult(k * 0.5f));
-            swordTiltZ += 0.12f * (1f - impact);
+        // Pico do sweep: reforço de rastro/dano e leve jolt
+        if (s > 0.45f && s < 0.70f) {
+            float k = (float)Math.sin(((s - 0.45f) / 0.25f) * Math.PI); // sino 0..1..0
+            swordSweepScale = Math.max(swordSweepScale, 0.6f * k);
+            swordOffset = swordOffset.add(cam.getLeft().mult(0.01f * dir * k))
+                                     .add(cam.getUp().mult(-0.01f * k));
         }
 
-        // Follow-through: continua um pouco e começa a diminuir a rotação
+        // Settle: retorna ao repouso suavemente
         swordOffset = swordOffset.add(
-            cam.getDirection().mult(0.08f * fE)
-                .add(cam.getLeft().mult(-0.05f * fE))
-                .add(cam.getUp().mult(-0.03f * fE))
-        );
-        swordTiltX += -0.35f * fE;
-        swordTiltY += -0.25f * fE;
-        swordTiltZ += 0.18f * fE;
-
-        // Settle: retorna em direção à pose de descanso
-        swordOffset = swordOffset.add(
-            cam.getDirection().mult(-0.22f * zE)
-                .add(cam.getUp().mult(0.10f * zE))
+            cam.getDirection().mult(-0.17f * zE)
                 .add(cam.getLeft().mult(0.06f * zE))
+                .add(cam.getUp().mult(0.06f * zE))
         );
-        swordTiltX += 0.95f * zE;
-        swordTiltY += 0.60f * zE;
-        swordTiltZ += -0.40f * zE;
+        swordTiltX += 0.35f * zE;
+        swordTiltY += -0.35f * zE; // volta o yaw para ~0
+        swordTiltZ += 0.10f * zE;
 
         if (swordBlocking) {
             // Defesa: eleva mais e gira para dentro; reduz efeito do swing
@@ -760,7 +875,8 @@ public class HotbarState extends BaseAppState {
             float len = dir.length();
             if (len > 0.02f) { // segmento relevante
                 dir.divideLocal(len);
-                float width = 0.08f; float halfLen = len * 0.5f; // rastro um pouco mais largo
+                float width = 0.08f * (1f + 0.7f * swordSweepScale);
+                float halfLen = len * 0.5f; // rastro um pouco mais largo
                 Geometry trail = new Geometry("sword-trail", new Box(width, width * 0.15f, halfLen));
                 Material tm = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
                 tm.setColor("Color", new ColorRGBA(0.9f, 0.95f, 1f, 0.35f));
@@ -772,14 +888,14 @@ public class HotbarState extends BaseAppState {
                 q.lookAt(dir, Vector3f.UNIT_Y);
                 trail.setLocalRotation(q);
                 app.getRootNode().attachChild(trail);
-                swordTrails.add(new TrailSegment(trail, 0.18f));
+                swordTrails.add(new TrailSegment(trail, 0.18f + 0.10f * swordSweepScale));
 
                 // HIT DETECTION: aplica dano nos mobs ao varrer o segmento
                 var mm = getStateManager().getState(com.minecraftcopilot.mobs.MobManager.class);
                 if (mm != null) {
-                    float baseDmg = Math.min(12f, len * 60f); // quanto mais rápido o movimento, maior dano
-                    // Aumenta o alcance: raio maior no sweep principal
-                    mm.applySwordSweep(lastTipWS.clone(), tipWS.clone(), 0.28f, baseDmg, dir.clone());
+                    float baseDmg = Math.min(12f, len * 60f) * (1f + 0.4f * swordSweepScale); // reforço
+                    // Aumenta o alcance no sweep principal
+                    mm.applySwordSweep(lastTipWS.clone(), tipWS.clone(), 0.28f * (1f + 0.5f * swordSweepScale), baseDmg, dir.clone());
 
                     // Alcance extra à frente ("poke"): varredura curta no sentido da câmera a partir da ponta
                     var camDir = app.getCamera().getDirection().normalize();

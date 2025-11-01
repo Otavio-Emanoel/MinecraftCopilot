@@ -33,7 +33,7 @@ public class TextureAtlas {
     private void buildDefaultTiles() {
         // Indices:
         // 0 grass_top, 1 grass_side, 2 dirt, 3 stone, 4 log_side, 5 log_top, 6 leaves,
-        // 7 water_f0, 8 water_f1, 9 water_f2, 10 egg_item, 11 devfest_item, 12 sword_item, 13 dummy_item, 14 bow_item, 15 arrow_item
+    // 7 water_f0, 8 water_f1, 9 water_f2, 10 egg_item, 11 devfest_item, 12 sword_item, 13 dummy_item, 14 bow_item, 15 arrow_item, 16 sword2_item
         drawGrassTop(0);
         drawGrassSide(1);
         drawDirt(2);
@@ -56,6 +56,8 @@ public class TextureAtlas {
         drawBow(14);
         // Ícone da Flecha
         drawArrowIcon(15);
+        // Ícone da segunda espada
+        drawSwordAlt(16);
     }
 
     private void drawGrassTop(int idx) {
@@ -329,6 +331,32 @@ public class TextureAtlas {
         g.setColor(dark);
         g.fillRect(cx - tileSize/6, pad + (int)(tileSize*0.75), tileSize/3, tileSize/12);
 
+        g.dispose();
+    }
+
+    private void drawSwordAlt(int idx) {
+        int x0 = idx * tileSize;
+        Graphics2D g = atlas.createGraphics();
+        g.setComposite(AlphaComposite.SrcOver);
+        // fundo com leve gradiente
+        GradientPaint gp = new GradientPaint(x0, 0, new Color(18, 20, 28, 220), x0, tileSize, new Color(12, 14, 20, 220));
+        g.setPaint(gp);
+        g.fillRect(x0, 0, tileSize, tileSize);
+        // lâmina mais escura/prateada
+        int cx = x0 + tileSize/2;
+        g.setColor(new Color(210, 215, 220));
+        g.fillPolygon(new int[]{cx-3, cx+5, cx+8, cx}, new int[]{3, 6, tileSize-6, tileSize-10}, 4);
+        g.setColor(new Color(255, 255, 255));
+        g.drawLine(cx+5, 6, cx+7, tileSize-7);
+        // guarda
+        g.setColor(new Color(200, 170, 60));
+        g.fillRect(cx-7, tileSize-13, 14, 3);
+        // cabo
+        g.setColor(new Color(35, 28, 22));
+        g.fillRect(cx-2, tileSize-13, 4, 10);
+        // pomo
+        g.setColor(new Color(160, 35, 35));
+        g.fillRect(cx-2, tileSize-3, 4, 2);
         g.dispose();
     }
 

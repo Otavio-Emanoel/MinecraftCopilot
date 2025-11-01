@@ -40,6 +40,11 @@ public enum BlockType {
     ARROW(12, new ColorRGBA(1f, 1f, 1f, 1f), 15, 15, 15) {
         @Override public boolean isSolid() { return false; }
         @Override public boolean isBlocking() { return false; }
+    },
+    // Segunda espada (modelo externo)
+    SWORD2(13, new ColorRGBA(1f, 1f, 1f, 1f), 16, 16, 16) {
+        @Override public boolean isSolid() { return false; }
+        @Override public boolean isBlocking() { return false; }
     };
 
     public final byte id;

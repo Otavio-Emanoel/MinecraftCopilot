@@ -3,6 +3,7 @@ package com.minecraftcopilot.state;
 import com.jme3.app.Application;
 import com.jme3.app.SimpleApplication;
 import com.jme3.app.state.BaseAppState;
+import com.jme3.asset.plugins.FileLocator;
 import com.jme3.font.BitmapFont;
 import com.jme3.font.BitmapText;
 import com.jme3.material.Material;
@@ -20,6 +21,8 @@ import com.minecraftcopilot.Chunk;
 import com.minecraftcopilot.ui.ChatState;
 import com.minecraftcopilot.mobs.MobManager;
 import com.minecraftcopilot.ui.WaterFXState;
+import com.jme3.scene.plugins.OBJLoader;
+import com.jme3.scene.plugins.gltf.GltfLoader;
 
 public class VoxelGameState extends BaseAppState {
 
@@ -63,6 +66,14 @@ public class VoxelGameState extends BaseAppState {
         this.app = (SimpleApplication) application;
         this.worldNode = new Node("world");
 
+        // Registrar pasta de modelos externos (durante desenvolvimento)
+        try {
+            app.getAssetManager().registerLocator("src/main/Models", FileLocator.class);
+        } catch (Exception ignored) {}
+    // Registrar loaders de formatos comuns (caso não estejam ativos por padrão)
+        try { app.getAssetManager().registerLoader(OBJLoader.class, "obj"); } catch (Throwable ignored) {}
+        try { app.getAssetManager().registerLoader(GltfLoader.class, "gltf", "glb"); } catch (Throwable ignored) {}
+
         // Cor do fundo "dia"
         app.getViewPort().setBackgroundColor(new ColorRGBA(0.6f, 0.8f, 1f, 1f));
 
@@ -79,7 +90,7 @@ public class VoxelGameState extends BaseAppState {
         this.chunkMaterialSolid = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
         this.chunkMaterialSolid.setBoolean("VertexColor", true);
     // Aumenta quantidade de tiles para incluir tronco/folhas/água animada (3 frames)
-    TextureAtlas atlas = new TextureAtlas(16, 16);
+    TextureAtlas atlas = new TextureAtlas(16, 17);
     Chunk.ATLAS = atlas;
     var tex = atlas.buildTexture(app.getAssetManager());
     this.chunkMaterialSolid.setTexture("ColorMap", tex);
