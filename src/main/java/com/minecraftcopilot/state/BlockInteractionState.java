@@ -9,13 +9,16 @@ import com.jme3.input.MouseInput;
 import com.jme3.input.controls.ActionListener;
 import com.jme3.input.controls.MouseButtonTrigger;
 import com.jme3.material.Material;
+import com.jme3.material.RenderState;
 import com.jme3.math.ColorRGBA;
+import com.jme3.math.FastMath;
 import com.jme3.math.Ray;
 import com.jme3.math.Vector3f;
 import com.jme3.renderer.queue.RenderQueue;
 import com.jme3.scene.Geometry;
 import com.jme3.scene.Node;
 import com.jme3.scene.debug.WireBox;
+import com.jme3.scene.shape.Box;
 import com.minecraftcopilot.BlockType;
 import com.minecraftcopilot.Chunk;
 import com.minecraftcopilot.world.ChunkManager;
@@ -45,6 +48,13 @@ public class BlockInteractionState extends BaseAppState {
 
     private ActionListener action;
 
+    // Partículas simples de detrito ao quebrar bloco
+    private static class Debris {
+        Geometry geo; Vector3f vel; float life; float maxLife;
+        Debris(Geometry g, Vector3f v, float l){ this.geo=g; this.vel=v; this.life=l; this.maxLife=l; }
+    }
+    private final java.util.List<Debris> debrisList = new java.util.ArrayList<>();
+
     public BlockInteractionState(Node worldNode, ChunkManager chunkManager, HotbarState hotbar) {
         this.worldNode = worldNode;
         this.chunkManager = chunkManager;
@@ -66,6 +76,9 @@ public class BlockInteractionState extends BaseAppState {
                     // animação de ataque já é disparada pelo HotbarState; aqui só ignoramos a quebra
                     return;
                 }
+                // Antes de remover, pega o tipo e emite partículas
+                BlockType broken = chunkManager.getBlockAtWorld(selWx, selWy, selWz);
+                emitBreakParticles(selWx, selWy, selWz, broken, lastRayDir != null ? lastRayDir : new Vector3f(0,1,0));
                 chunkManager.setBlockAtWorld(selWx, selWy, selWz, BlockType.AIR);
                 // Notifica água ao redor para reagir
                 for (int dx = -1; dx <= 1; dx++)
@@ -182,6 +195,9 @@ public class BlockInteractionState extends BaseAppState {
         setSelection(wx, wy, wz);
         lastHitContact = contact;
         lastRayDir = dir;
+
+        // Atualiza partículas de detrito
+        updateDebris(tpf);
     }
 
     private void setSelection(int wx, int wy, int wz) {
@@ -233,6 +249,9 @@ public class BlockInteractionState extends BaseAppState {
             app.getInputManager().removeListener(action);
         }
         clearSelection();
+        // Limpa partículas remanescentes
+        for (Debris d : debrisList) if (d.geo != null) d.geo.removeFromParent();
+        debrisList.clear();
     }
 
     @Override
@@ -240,4 +259,64 @@ public class BlockInteractionState extends BaseAppState {
 
     @Override
     protected void onDisable() { }
+
+    // --- Partículas de quebra ---
+    private void emitBreakParticles(int wx, int wy, int wz, BlockType type, Vector3f rayDir) {
+        if (type == null || type == BlockType.AIR) return;
+        // Cores derivadas do bloco
+        ColorRGBA base = type.color != null ? type.color.clone() : new ColorRGBA(0.8f,0.8f,0.8f,1f);
+        int count = 18; // quantidade moderada
+        Vector3f center = new Vector3f(wx + 0.5f, wy + 0.5f, wz + 0.5f);
+        for (int i = 0; i < count; i++) {
+            float sx = (FastMath.nextRandomFloat() - 0.5f);
+            float sy = (FastMath.nextRandomFloat() - 0.5f);
+            float sz = (FastMath.nextRandomFloat() - 0.5f);
+            Vector3f local = new Vector3f(sx, sy, sz).multLocal(0.5f);
+            // tamanho do fragmento
+            float s = 0.04f + 0.04f * FastMath.nextRandomFloat();
+            Geometry g = new Geometry("debris", new Box(s, s, s));
+            Material m = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+            // leve variação de cor
+            float v = 0.85f + 0.15f * FastMath.nextRandomFloat();
+            m.setColor("Color", new ColorRGBA(base.r * v, base.g * v, base.b * v, 0.95f));
+            m.getAdditionalRenderState().setBlendMode(RenderState.BlendMode.Alpha);
+            g.setMaterial(m);
+            g.setQueueBucket(RenderQueue.Bucket.Transparent);
+            g.setLocalTranslation(center.add(local));
+            app.getRootNode().attachChild(g);
+
+            // velocidade inicial: empurrar levemente para fora do bloco + aleatório
+            Vector3f out = rayDir.negate().normalizeLocal().multLocal(1.3f + 0.6f * FastMath.nextRandomFloat());
+            Vector3f rand = new Vector3f(
+                    (FastMath.nextRandomFloat() - 0.5f),
+                    (FastMath.nextRandomFloat()),
+                    (FastMath.nextRandomFloat() - 0.5f)
+            ).multLocal(1.1f);
+            Vector3f vel = out.addLocal(rand).multLocal(2.0f * (0.6f + 0.8f * FastMath.nextRandomFloat()));
+            float life = 0.6f + 0.5f * FastMath.nextRandomFloat();
+            debrisList.add(new Debris(g, vel, life));
+        }
+    }
+
+    private void updateDebris(float tpf) {
+        if (debrisList.isEmpty()) return;
+        for (int i = debrisList.size() - 1; i >= 0; i--) {
+            Debris d = debrisList.get(i);
+            d.life -= tpf;
+            // física simples: gravidade e amortecimento
+            d.vel.y -= 9.8f * 0.9f * tpf;
+            d.vel.multLocal(1.0f - 0.8f * tpf); // arrasto leve
+            // integra posição
+            d.geo.move(d.vel.mult(tpf));
+            // fade e encolher
+            float a = Math.max(0f, Math.min(1f, d.life / d.maxLife));
+            var col = (ColorRGBA) d.geo.getMaterial().getParam("Color").getValue();
+            d.geo.getMaterial().setColor("Color", new ColorRGBA(col.r, col.g, col.b, 0.2f + 0.75f * a));
+            d.geo.setLocalScale(0.8f + 0.4f * a);
+            if (d.life <= 0f) {
+                d.geo.removeFromParent();
+                debrisList.remove(i);
+            }
+        }
+    }
 }
