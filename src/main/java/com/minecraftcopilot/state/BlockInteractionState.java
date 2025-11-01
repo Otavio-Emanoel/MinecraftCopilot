@@ -55,6 +55,14 @@ public class BlockInteractionState extends BaseAppState {
     }
     private final java.util.List<Debris> debrisList = new java.util.ArrayList<>();
 
+    // Hold-to-repeat (quebrar/colocar)
+    private boolean breakHeld = false;
+    private boolean placeHeld = false;
+    private float breakRepeatTimer = 0f;
+    private float placeRepeatTimer = 0f;
+    private static final float BREAK_REPEAT_PERIOD = 0.12f; // segundos entre ações
+    private static final float PLACE_REPEAT_PERIOD = 0.10f;
+
     public BlockInteractionState(Node worldNode, ChunkManager chunkManager, HotbarState hotbar) {
         this.worldNode = worldNode;
         this.chunkManager = chunkManager;
@@ -68,85 +76,18 @@ public class BlockInteractionState extends BaseAppState {
         app.getInputManager().addMapping("BI_Place", new MouseButtonTrigger(MouseInput.BUTTON_RIGHT));
         // Define o listener agora que a instância já foi construída (chunkManager está pronto)
         this.action = (name, isPressed, tpf) -> {
-            if (!isPressed) return;
-            if (MAP_BREAK.equals(name) && hasSelection) {
-                // Quebrar o bloco selecionado
-                // Se item selecionado é espada, não quebrar blocos (usa animação de ataque)
-                if (hotbar != null && hotbar.getSelectedBlock() == BlockType.SWORD) {
-                    // animação de ataque já é disparada pelo HotbarState; aqui só ignoramos a quebra
-                    return;
+            if (MAP_BREAK.equals(name)) {
+                breakHeld = isPressed;
+                if (isPressed && hasSelection) {
+                    // ação imediata
+                    performBreakAtSelection();
+                    breakRepeatTimer = BREAK_REPEAT_PERIOD;
                 }
-                // Antes de remover, pega o tipo e emite partículas
-                BlockType broken = chunkManager.getBlockAtWorld(selWx, selWy, selWz);
-                emitBreakParticles(selWx, selWy, selWz, broken, lastRayDir != null ? lastRayDir : new Vector3f(0,1,0));
-                chunkManager.setBlockAtWorld(selWx, selWy, selWz, BlockType.AIR);
-                // Notifica água ao redor para reagir
-                for (int dx = -1; dx <= 1; dx++)
-                    for (int dy = -1; dy <= 1; dy++)
-                        for (int dz = -1; dz <= 1; dz++)
-                            chunkManager.enqueueWaterUpdate(selWx + dx, selWy + dy, selWz + dz);
-                // Após quebrar, força re-avaliar a seleção no próximo update
-                hasSelection = false;
-                if (outline != null) outline.removeFromParent();
-                outline = null;
-                // Animação de quebrar
-                if (hotbar != null) hotbar.triggerBreakSwing();
-            } else if ("BI_Place".equals(name) && hasSelection && hotbar != null) {
-                BlockType toPlace = hotbar.getSelectedBlock();
-                if (toPlace != null && toPlace != BlockType.AIR && lastHitContact != null && lastRayDir != null) {
-                    if (toPlace == BlockType.SWORD) {
-                        // Espada: botão direito = defender (já tratado pelo HotbarState); não colocar blocos
-                        return;
-                    }
-                    Vector3f outside = lastHitContact.subtract(lastRayDir.mult(1e-3f));
-                    int pwx = (int) Math.floor(outside.x);
-                    int pwy = (int) Math.floor(outside.y);
-                    int pwz = (int) Math.floor(outside.z);
-                    // Se por algum motivo cair no mesmo bloco selecionado, empurra um passo no eixo dominante da direção
-                    if (pwx == selWx && pwy == selWy && pwz == selWz) {
-                        Vector3f d = lastRayDir;
-                        if (Math.abs(d.x) >= Math.abs(d.y) && Math.abs(d.x) >= Math.abs(d.z)) {
-                            pwx += (d.x > 0 ? -1 : 1);
-                        } else if (Math.abs(d.y) >= Math.abs(d.x) && Math.abs(d.y) >= Math.abs(d.z)) {
-                            pwy += (d.y > 0 ? -1 : 1);
-                        } else {
-                            pwz += (d.z > 0 ? -1 : 1);
-                        }
-                    }
-                    // Bloquear colocação que intersecta o jogador
-                    if (!wouldIntersectPlayer(pwx, pwy, pwz)) {
-                        if (toPlace == BlockType.EGG) {
-                            // Spawn de galinha: não coloca bloco
-                            MobManager mm = getStateManager().getState(MobManager.class);
-                            if (mm != null) {
-                                Vector3f spawn = new Vector3f(pwx + 0.5f, pwy + 1.0f, pwz + 0.5f);
-                                mm.spawnEgg(spawn);
-                            }
-                        } else if (toPlace == BlockType.DUMMY) {
-                            // Boneco de treino: spawna entidade estática, não coloca bloco
-                            MobManager mm = getStateManager().getState(MobManager.class);
-                            if (mm != null) {
-                                Vector3f spawn = new Vector3f(pwx + 0.5f, pwy + 1.0f, pwz + 0.5f);
-                                mm.spawnTrainingDummy(spawn);
-                            }
-                        } else if (toPlace == BlockType.DEVFEST) {
-                            // Dispara o builder do letreiro próximo ao jogador
-                            DevFestBuilder.placeDevFest(chunkManager, app.getCamera().getLocation(), app.getCamera().getDirection().normalize());
-                        } else if (toPlace == BlockType.WATER) {
-                            // Fonte de água meta=0
-                            chunkManager.setBlockAndMetaAtWorld(pwx, pwy, pwz, BlockType.WATER, 0);
-                            chunkManager.enqueueWaterUpdate(pwx, pwy, pwz);
-                        } else {
-                            chunkManager.setBlockAtWorld(pwx, pwy, pwz, toPlace);
-                            // Água ao redor reage
-                            for (int dx = -1; dx <= 1; dx++)
-                                for (int dy = -1; dy <= 1; dy++)
-                                    for (int dz = -1; dz <= 1; dz++)
-                                        chunkManager.enqueueWaterUpdate(pwx + dx, pwy + dy, pwz + dz);
-                        }
-                        // Animação de colocar
-                        hotbar.triggerPlaceSwing();
-                    }
+            } else if ("BI_Place".equals(name)) {
+                placeHeld = isPressed;
+                if (isPressed && hasSelection && hotbar != null) {
+                    performPlaceAtSelection();
+                    placeRepeatTimer = PLACE_REPEAT_PERIOD;
                 }
             }
         };
@@ -198,6 +139,22 @@ public class BlockInteractionState extends BaseAppState {
 
         // Atualiza partículas de detrito
         updateDebris(tpf);
+
+        // Repetição contínua se segurando botões
+        if (breakHeld) {
+            breakRepeatTimer -= tpf;
+            if (breakRepeatTimer <= 0f) {
+                if (hasSelection) performBreakAtSelection();
+                breakRepeatTimer = BREAK_REPEAT_PERIOD;
+            }
+        }
+        if (placeHeld) {
+            placeRepeatTimer -= tpf;
+            if (placeRepeatTimer <= 0f) {
+                if (hasSelection && hotbar != null) performPlaceAtSelection();
+                placeRepeatTimer = PLACE_REPEAT_PERIOD;
+            }
+        }
     }
 
     private void setSelection(int wx, int wy, int wz) {
@@ -252,6 +209,7 @@ public class BlockInteractionState extends BaseAppState {
         // Limpa partículas remanescentes
         for (Debris d : debrisList) if (d.geo != null) d.geo.removeFromParent();
         debrisList.clear();
+        breakHeld = false; placeHeld = false;
     }
 
     @Override
@@ -318,5 +276,79 @@ public class BlockInteractionState extends BaseAppState {
                 debrisList.remove(i);
             }
         }
+    }
+
+    // --- Ações auxiliares ---
+    private void performBreakAtSelection() {
+        if (!hasSelection) return;
+        // Se item selecionado é espada, não quebrar blocos (usa animação de ataque)
+        if (hotbar != null && hotbar.getSelectedBlock() == BlockType.SWORD) return;
+
+        // emite partículas e remove bloco
+        BlockType broken = chunkManager.getBlockAtWorld(selWx, selWy, selWz);
+        emitBreakParticles(selWx, selWy, selWz, broken, lastRayDir != null ? lastRayDir : new Vector3f(0,1,0));
+        chunkManager.setBlockAtWorld(selWx, selWy, selWz, BlockType.AIR);
+        // água ao redor
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dz = -1; dz <= 1; dz++)
+                    chunkManager.enqueueWaterUpdate(selWx + dx, selWy + dy, selWz + dz);
+        // Reavaliar seleção
+        hasSelection = false;
+        if (outline != null) outline.removeFromParent();
+        outline = null;
+        if (hotbar != null) hotbar.triggerBreakSwing();
+    }
+
+    private void performPlaceAtSelection() {
+        if (!hasSelection || hotbar == null) return;
+        BlockType toPlace = hotbar.getSelectedBlock();
+        if (toPlace == null || toPlace == BlockType.AIR || lastHitContact == null || lastRayDir == null) return;
+        if (toPlace == BlockType.SWORD) return; // defender é tratado no HotbarState
+
+        Vector3f outside = lastHitContact.subtract(lastRayDir.mult(1e-3f));
+        int pwx = (int) Math.floor(outside.x);
+        int pwy = (int) Math.floor(outside.y);
+        int pwz = (int) Math.floor(outside.z);
+        if (pwx == selWx && pwy == selWy && pwz == selWz) {
+            Vector3f d = lastRayDir;
+            if (Math.abs(d.x) >= Math.abs(d.y) && Math.abs(d.x) >= Math.abs(d.z)) {
+                pwx += (d.x > 0 ? -1 : 1);
+            } else if (Math.abs(d.y) >= Math.abs(d.x) && Math.abs(d.y) >= Math.abs(d.z)) {
+                pwy += (d.y > 0 ? -1 : 1);
+            } else {
+                pwz += (d.z > 0 ? -1 : 1);
+            }
+        }
+        if (wouldIntersectPlayer(pwx, pwy, pwz)) return;
+
+        if (toPlace == BlockType.EGG) {
+            MobManager mm = getStateManager().getState(MobManager.class);
+            if (mm != null) {
+                Vector3f spawn = new Vector3f(pwx + 0.5f, pwy + 1.0f, pwz + 0.5f);
+                mm.spawnEgg(spawn);
+            }
+        } else if (toPlace == BlockType.DUMMY) {
+            MobManager mm = getStateManager().getState(MobManager.class);
+            if (mm != null) {
+                Vector3f spawn = new Vector3f(pwx + 0.5f, pwy + 1.0f, pwz + 0.5f);
+                mm.spawnTrainingDummy(spawn);
+            }
+        } else if (toPlace == BlockType.DEVFEST) {
+            DevFestBuilder.placeDevFest(chunkManager, app.getCamera().getLocation(), app.getCamera().getDirection().normalize());
+        } else if (toPlace == BlockType.WATER) {
+            chunkManager.setBlockAndMetaAtWorld(pwx, pwy, pwz, BlockType.WATER, 0);
+            chunkManager.enqueueWaterUpdate(pwx, pwy, pwz);
+        } else {
+            // Evita rebuild redundante se já for o mesmo bloco
+            if (chunkManager.getBlockAtWorld(pwx, pwy, pwz) != toPlace) {
+                chunkManager.setBlockAtWorld(pwx, pwy, pwz, toPlace);
+                for (int dx = -1; dx <= 1; dx++)
+                    for (int dy = -1; dy <= 1; dy++)
+                        for (int dz = -1; dz <= 1; dz++)
+                            chunkManager.enqueueWaterUpdate(pwx + dx, pwy + dy, pwz + dz);
+            }
+        }
+        hotbar.triggerPlaceSwing();
     }
 }
