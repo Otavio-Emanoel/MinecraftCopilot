@@ -33,7 +33,7 @@ public class TextureAtlas {
     private void buildDefaultTiles() {
         // Indices:
         // 0 grass_top, 1 grass_side, 2 dirt, 3 stone, 4 log_side, 5 log_top, 6 leaves,
-        // 7 water_f0, 8 water_f1, 9 water_f2, 10 egg_item, 11 devfest_item, 12 sword_item, 13 dummy_item
+        // 7 water_f0, 8 water_f1, 9 water_f2, 10 egg_item, 11 devfest_item, 12 sword_item, 13 dummy_item, 14 bow_item, 15 arrow_item
         drawGrassTop(0);
         drawGrassSide(1);
         drawDirt(2);
@@ -52,6 +52,10 @@ public class TextureAtlas {
         drawSword(12);
         // Ícone do Boneco de Treino
         drawDummy(13);
+        // Ícone do Arco
+        drawBow(14);
+        // Ícone da Flecha
+        drawArrowIcon(15);
     }
 
     private void drawGrassTop(int idx) {
@@ -325,6 +329,80 @@ public class TextureAtlas {
         g.setColor(dark);
         g.fillRect(cx - tileSize/6, pad + (int)(tileSize*0.75), tileSize/3, tileSize/12);
 
+        g.dispose();
+    }
+
+    private void drawBow(int idx) {
+        int x0 = idx * tileSize;
+        Graphics2D g = atlas.createGraphics();
+        // fundo translúcido escuro
+        g.setComposite(AlphaComposite.SrcOver);
+        g.setColor(new Color(15, 17, 22, 210));
+        g.fillRect(x0, 0, tileSize, tileSize);
+
+        // arco estilizado (curva) + corda
+        int pad = Math.max(2, tileSize / 8);
+        int cx = x0 + tileSize / 2;
+        int cy = tileSize / 2;
+
+        // corpo do arco (marrom)
+        g.setColor(new Color(120, 90, 55));
+        int w = tileSize - pad * 2;
+        int h = tileSize - pad * 2;
+        // Desenha duas curvas Bezier aproximadas como segmentos
+        g.setStroke(new BasicStroke(Math.max(2f, tileSize / 18f)));
+        for (int i = 0; i < 3; i++) {
+            int ox = (int) (pad * 0.6);
+            g.drawArc(x0 + ox, pad + i, w - ox * 2, h - i * 2, 100, 280);
+        }
+
+        // corda (clara)
+        g.setColor(new Color(220, 220, 220));
+        g.setStroke(new BasicStroke(Math.max(1.5f, tileSize / 32f)));
+        int topX = x0 + pad + (int)(w * 0.12);
+        int botX = x0 + pad + (int)(w * 0.12);
+        g.drawLine(topX, pad, cx + (int)(w * 0.20), cy);
+        g.drawLine(cx + (int)(w * 0.20), cy, botX, pad + h);
+
+        // destaque
+        g.setColor(new Color(170, 135, 85));
+        g.drawArc(x0 + pad, pad + 1, w - pad, h - 2, 100, 280);
+        g.dispose();
+    }
+
+    private void drawArrowIcon(int idx) {
+        int x0 = idx * tileSize;
+        Graphics2D g = atlas.createGraphics();
+        // fundo translúcido escuro
+        g.setComposite(AlphaComposite.SrcOver);
+        g.setColor(new Color(15, 17, 22, 210));
+        g.fillRect(x0, 0, tileSize, tileSize);
+
+        int pad = Math.max(2, tileSize / 8);
+        int x1 = x0 + pad;
+        int y1 = pad + tileSize / 3;
+        int x2 = x0 + tileSize - pad;
+        int y2 = pad + (int)(tileSize * 0.66);
+
+        // haste
+        g.setColor(new Color(180, 170, 150));
+        g.setStroke(new BasicStroke(Math.max(2f, tileSize / 28f)));
+        g.drawLine(x1, y1, x2, y2);
+
+        // ponta
+        g.setColor(new Color(230, 230, 230));
+        int hx = x2;
+        int hy = y2;
+        Polygon tip = new Polygon(
+                new int[]{hx, hx - tileSize / 8, hx - tileSize / 12},
+                new int[]{hy, hy - tileSize / 16, hy + tileSize / 16}, 3);
+        g.fillPolygon(tip);
+
+        // penas
+        g.setColor(new Color(200, 60, 60));
+        int fx = x1;
+        int fy = y1;
+        g.fillPolygon(new int[]{fx, fx + tileSize / 10, fx + tileSize / 14}, new int[]{fy, fy - tileSize / 10, fy + tileSize / 10}, 3);
         g.dispose();
     }
 

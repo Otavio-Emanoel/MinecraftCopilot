@@ -281,8 +281,11 @@ public class BlockInteractionState extends BaseAppState {
     // --- Ações auxiliares ---
     private void performBreakAtSelection() {
         if (!hasSelection) return;
-        // Se item selecionado é espada, não quebrar blocos (usa animação de ataque)
-        if (hotbar != null && hotbar.getSelectedBlock() == BlockType.SWORD) return;
+        // Se item selecionado é espada ou arco, não quebrar blocos (usa lógica própria)
+        if (hotbar != null) {
+            BlockType sel = hotbar.getSelectedBlock();
+            if (sel == BlockType.SWORD || sel == BlockType.BOW) return;
+        }
 
         // emite partículas e remove bloco
         BlockType broken = chunkManager.getBlockAtWorld(selWx, selWy, selWz);
@@ -304,7 +307,7 @@ public class BlockInteractionState extends BaseAppState {
         if (!hasSelection || hotbar == null) return;
         BlockType toPlace = hotbar.getSelectedBlock();
         if (toPlace == null || toPlace == BlockType.AIR || lastHitContact == null || lastRayDir == null) return;
-        if (toPlace == BlockType.SWORD) return; // defender é tratado no HotbarState
+    if (toPlace == BlockType.SWORD || toPlace == BlockType.BOW || toPlace == BlockType.ARROW) return; // não coloca itens de arma/munição
 
         Vector3f outside = lastHitContact.subtract(lastRayDir.mult(1e-3f));
         int pwx = (int) Math.floor(outside.x);

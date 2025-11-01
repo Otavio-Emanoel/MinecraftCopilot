@@ -75,6 +75,13 @@ public class HotbarState extends BaseAppState {
     private Node swordPivotNode; // quando a mão segura uma espada
     private Node swordModelNode; // modelo real da espada
     private Node swordTipNode;   // nó de referência na ponta
+    // Arco
+    private Node bowNode;        // nó do arco
+    private boolean bowCharging = false;
+    private float bowChargeTime = 0f;
+    private final float bowChargeMax = 1.0f; // ~1s para carga máxima
+    private Geometry bowStringGeo; // referência para animar a corda
+    private Node bowLoadedArrow;   // flecha desenhada enquanto carrega
 
     // Rastro da espada (afterimage)
     private static class TrailSegment {
@@ -116,6 +123,7 @@ public class HotbarState extends BaseAppState {
     public void triggerSwordAttack() { this.swordAttack = 1f; }
     public void setSwordBlocking(boolean blocking) { this.swordBlocking = blocking; }
     public boolean isSwordSelected() { return getSelectedBlock() == BlockType.SWORD; }
+    public boolean isBowSelected() { return getSelectedBlock() == BlockType.BOW; }
 
     public void setSlot(int index, BlockType type) {
         if (index < 0 || index >= slots.length) return;
@@ -222,11 +230,16 @@ public class HotbarState extends BaseAppState {
     private final ActionListener actionListener = (name, isPressed, tpf) -> {
         int before = selected;
         if (HB_ATTACK.equals(name)) {
-            if (isPressed && isSwordSelected()) triggerSwordAttack();
-            // deixa BlockInteractionState cuidar de quebrar blocos quando não for espada
+            if (isSwordSelected()) {
+                if (isPressed) triggerSwordAttack();
+                return;
+            }
+            // Para Bow usamos o botão direito (HB_DEFEND) como no Minecraft
+            // Deixa o BlockInteractionState cuidar de quebrar blocos para outros itens
             return;
         } else if (HB_DEFEND.equals(name)) {
-            if (isSwordSelected()) setSwordBlocking(isPressed);
+            if (isSwordSelected()) { setSwordBlocking(isPressed); return; }
+            if (isBowSelected()) { if (isPressed) startBowCharge(); else releaseBowCharge(); return; }
             return;
         } else if (HB_POWER.equals(name)) {
             if (!isSwordSelected()) return;
@@ -311,7 +324,8 @@ public class HotbarState extends BaseAppState {
             if (s.geo != null) s.geo.removeFromParent();
             swordTrails.remove(i);
         }
-        swordPivotNode = null; swordModelNode = null; swordTipNode = null; lastTipWS = null;
+    swordPivotNode = null; swordModelNode = null; swordTipNode = null; lastTipWS = null;
+    bowNode = null; bowStringGeo = null; bowLoadedArrow = null;
         BlockType t = getSelectedBlock();
         if (t == null || t == BlockType.AIR) {
             // Mostra uma "mão" quando não há item selecionado
@@ -325,6 +339,10 @@ public class HotbarState extends BaseAppState {
                 swordModelNode = (Node) n.getChild("swordModel");
                 if (swordModelNode != null) swordTipNode = (Node) swordModelNode.getChild("tip");
             }
+        } else if (t == BlockType.BOW) {
+            handGeom = buildBowModel();
+            handGeom.setLocalScale(1.1f);
+            if (handGeom instanceof Node n) bowNode = n; else bowNode = null;
         } else {
             handGeom = buildBlockGeometry(t, blockMaterial);
             handGeom.setLocalScale(0.28f);
@@ -534,6 +552,9 @@ public class HotbarState extends BaseAppState {
         if (swordPowerCharging) {
             swordPowerChargeTime = Math.min(swordPowerChargeMax, swordPowerChargeTime + tpf);
         }
+        if (isBowSelected() && bowCharging) {
+            bowChargeTime = Math.min(bowChargeMax, bowChargeTime + tpf);
+        }
         // Posicionar o item na mão relativo à câmera (inferior direita da tela, um pouco à frente)
         var cam = app.getCamera();
         Vector3f base = cam.getLocation().add(cam.getDirection().mult(0.45f))
@@ -673,6 +694,46 @@ public class HotbarState extends BaseAppState {
 
         // RASTRO: se estamos no meio do slash, solta segmentos seguindo a ponta
         emitSwordTrail(tpf);
+    } else if (isBowSelected()) {
+    // Pose do arco: mais visível na tela (mais ao centro e um pouco à frente)
+    Vector3f bowOffset = cam.getDirection().mult(0.12f)
+        .add(cam.getLeft().mult(-0.12f))
+        .add(cam.getUp().mult(-0.02f));
+        float draw = bowCharging ? clamp01(bowChargeTime / bowChargeMax) : 0f;
+        // Puxar a mão para trás ao carregar
+        bowOffset = bowOffset.add(cam.getDirection().mult(-0.18f * draw))
+                             .add(cam.getLeft().mult(0.05f * draw))
+                             .add(cam.getUp().mult(0.03f * draw));
+        // Pequena rotação para mirar
+    float bowTiltX = -0.10f - 0.15f * draw;
+    float bowTiltY = 0.15f + 0.05f * draw;
+    float bowTiltZ = 0.08f;
+        // Aplicar offsets
+        Vector3f pos = base.add(cam.getLeft().mult(-swayX)).add(cam.getUp().mult(swayY)).add(bowOffset);
+        handNode.setLocalTranslation(pos);
+        Quaternion rot = cam.getRotation().clone();
+        Quaternion tilt = new Quaternion().fromAngles(bowTiltX, bowTiltY, bowTiltZ);
+        rot = rot.mult(tilt);
+        handNode.setLocalRotation(rot);
+
+        // Atualiza animação da corda e flecha carregada
+        if (bowStringGeo != null) {
+            // puxa a corda para trás no eixo Z local do arco (Z+ é para frente)
+            float baseZ = 0.10f;
+            float pullZ = baseZ - 0.14f * draw;
+            bowStringGeo.setLocalTranslation(0.10f, 0.0f, pullZ);
+        }
+        if (draw > 0f) {
+            ensureLoadedArrow();
+            if (bowLoadedArrow != null) {
+                bowLoadedArrow.setCullHint(Spatial.CullHint.Inherit);
+                bowLoadedArrow.setLocalTranslation(0.10f, 0.0f, 0.10f - 0.14f * draw);
+            }
+        } else {
+            if (bowLoadedArrow != null) bowLoadedArrow.setCullHint(Spatial.CullHint.Always);
+        }
+        // early return para não reprocessar com base tilt padrão
+        return;
     }
 
     Vector3f pos = base.add(cam.getLeft().mult(-swayX)).add(cam.getUp().mult(swayY))
@@ -818,6 +879,127 @@ public class HotbarState extends BaseAppState {
 
     // Compat: mantém método antigo chamando com carga média
     private void fireSwordWave() { fireSwordWave(0.6f); }
+
+    // ---- Arco/Flecha ----
+    private void startBowCharge() {
+        if (bowCharging) return;
+        bowCharging = true;
+        bowChargeTime = 0f;
+    }
+
+    private void releaseBowCharge() {
+        if (!bowCharging) return;
+        float f = clamp01(bowChargeTime / bowChargeMax);
+        fireArrow(f);
+        bowCharging = false;
+        bowChargeTime = 0f;
+    }
+
+    private void fireArrow(float charge) {
+        var pm = getStateManager().getState(com.minecraftcopilot.mobs.ProjectileManager.class);
+        if (pm == null) return;
+        Vector3f dir = app.getCamera().getDirection().normalize();
+        Vector3f right = app.getCamera().getLeft().negate();
+        Vector3f up = app.getCamera().getUp();
+        // Origem ligeiramente deslocada para a direita/baixo da câmera
+        Vector3f origin = app.getCamera().getLocation()
+                .add(dir.mult(0.6f))
+                .add(right.mult(0.18f))
+                .add(up.mult(-0.10f));
+        float f = clamp01(charge);
+        float speed = 25f + 35f * f; // mais carga = mais velocidade
+        // Dispersão: menos imprecisão com mais carga
+        float spread = FastMath.DEG_TO_RAD * (6f * (1f - f));
+        float ax = (FastMath.nextRandomFloat() - 0.5f) * spread;
+        float ay = (FastMath.nextRandomFloat() - 0.5f) * spread;
+        Vector3f shootDir = dir.clone();
+        // aplica pequena rotação
+        Quaternion q = new Quaternion().fromAngles(ay, ax, 0f);
+        shootDir = q.mult(shootDir).normalizeLocal();
+        Vector3f vel = shootDir.mult(speed);
+        float dmg = 5f + 10f * f; // dano escalar com carga
+        pm.spawnArrow(origin, vel, dmg);
+        // Oculta flecha carregada da mão
+        if (bowLoadedArrow != null) bowLoadedArrow.setCullHint(Spatial.CullHint.Always);
+    }
+
+    private Node buildBowModel() {
+        Node bow = new Node("bowModel");
+        // Material com textura de madeira usando Lighting (iluminado pelas luzes locais da mão)
+        Material wood = new Material(app.getAssetManager(), "Common/MatDefs/Light/Lighting.j3md");
+        wood.setBoolean("UseMaterialColors", false);
+        wood.setTexture("DiffuseMap", makeStripedTex(64, 128,
+                new ColorRGBA(0.42f, 0.30f, 0.18f, 1f), new ColorRGBA(0.32f, 0.22f, 0.14f, 1f), 10));
+        wood.setColor("Specular", new ColorRGBA(0.15f, 0.12f, 0.10f, 1f));
+        wood.setFloat("Shininess", 8f);
+        wood.getAdditionalRenderState().setFaceCullMode(RenderState.FaceCullMode.Off);
+
+        // Limbs curvos (superior e inferior) compostos por segmentos finos aproximando uma curva
+        int segs = 5;
+        for (int i = 0; i < segs; i++) {
+            float t = i / (float)(segs - 1);              // 0..1
+            float y = 0.10f + t * 0.42f;                  // 0.10 .. 0.52
+            float rot = 0.05f + t * 0.18f;                // curvatura crescente
+            Geometry g = new Geometry("bowLimbTop-"+i, new Box(0.018f, 0.09f, 0.018f));
+            g.setMaterial(wood);
+            g.setLocalTranslation(0.08f, y, 0.12f);
+            g.setLocalRotation(new Quaternion().fromAngles(0.0f, 0.0f, rot));
+            bow.attachChild(g);
+        }
+        for (int i = 0; i < segs; i++) {
+            float t = i / (float)(segs - 1);
+            float y = -0.10f - t * 0.42f;                 // -0.10 .. -0.52
+            float rot = -0.05f - t * 0.18f;
+            Geometry g = new Geometry("bowLimbBot-"+i, new Box(0.018f, 0.09f, 0.018f));
+            g.setMaterial(wood);
+            g.setLocalTranslation(0.08f, y, 0.12f);
+            g.setLocalRotation(new Quaternion().fromAngles(0.0f, 0.0f, rot));
+            bow.attachChild(g);
+        }
+
+        // Empunhadura levemente mais grossa
+        Geometry grip = new Geometry("bowGrip", new Box(0.03f, 0.12f, 0.03f));
+        grip.setMaterial(wood);
+        grip.setLocalTranslation(0f, 0.0f, 0.12f);
+        bow.attachChild(grip);
+
+        // Corda translúcida
+        Material stringMat = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        stringMat.setColor("Color", new ColorRGBA(0.95f,0.95f,0.95f,1f));
+        stringMat.getAdditionalRenderState().setFaceCullMode(RenderState.FaceCullMode.Off);
+        Geometry string = new Geometry("bowString", new Box(0.005f, 0.40f, 0.005f));
+        string.setMaterial(stringMat);
+        string.setLocalTranslation(0.10f, 0.0f, 0.10f);
+        bow.attachChild(string);
+        bowStringGeo = string;
+
+        // Translate para a "mão"
+        bow.setLocalTranslation(0.0f, 0.0f, 0.0f);
+        return bow;
+    }
+
+    private void ensureLoadedArrow() {
+        if (bowNode == null) return;
+        if (bowLoadedArrow != null) return;
+        // pequena flecha visível no arco durante a carga
+        Material shaftM = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        shaftM.setColor("Color", new ColorRGBA(0.85f, 0.8f, 0.7f, 1f));
+        Geometry shaft = new Geometry("loadedShaft", new Box(0.01f, 0.01f, 0.28f));
+        shaft.setMaterial(shaftM);
+        shaft.setLocalTranslation(0f, 0f, 0f);
+
+        Material headM = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+        headM.setColor("Color", new ColorRGBA(0.95f, 0.95f, 1f, 1f));
+        Geometry head = new Geometry("loadedHead", new Box(0.014f, 0.014f, 0.04f));
+        head.setMaterial(headM);
+        head.setLocalTranslation(0f, 0f, 0.32f);
+
+        bowLoadedArrow = new Node("bowLoadedArrow");
+        bowLoadedArrow.attachChild(shaft);
+        bowLoadedArrow.attachChild(head);
+        bowLoadedArrow.setCullHint(Spatial.CullHint.Always);
+        bowNode.attachChild(bowLoadedArrow);
+    }
 
     private static float clamp01(float v) { return Math.max(0f, Math.min(1f, v)); }
     private static float easeOutCubic(float t) { double u = 1.0 - t; return (float)(1.0 - u*u*u); }

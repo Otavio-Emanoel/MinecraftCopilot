@@ -29,6 +29,7 @@ public class ProjectileManager extends BaseAppState {
     private SimpleApplication app;
     private final Node root = new Node("projectiles");
     private final List<WaveProjectile> waves = new ArrayList<>();
+    private final List<Arrow> arrows = new ArrayList<>();
 
     public ProjectileManager(ChunkManager cm) {
         this.chunkManager = cm;
@@ -61,6 +62,15 @@ public class ProjectileManager extends BaseAppState {
                 it.remove();
             }
         }
+        // arrows
+        Iterator<Arrow> ita = arrows.iterator();
+        while (ita.hasNext()) {
+            Arrow a = ita.next();
+            if (a.update(tpf, chunkManager, mm)) {
+                a.detach();
+                ita.remove();
+            }
+        }
     }
 
     public void spawnGetsuga(Vector3f pos, Vector3f dir, float speed, float damage, float radius) {
@@ -79,6 +89,12 @@ public class ProjectileManager extends BaseAppState {
         WaveProjectile w = new WaveProjectile(app, pos, dir, speed, damage, outerRadius, innerRadius, arcAngleRad, length);
         root.attachChild(w.geo);
         waves.add(w);
+    }
+
+    public void spawnArrow(Vector3f origin, Vector3f velocity, float damage) {
+        Arrow a = new Arrow(app, origin, velocity, damage);
+        root.attachChild(a.geo);
+        arrows.add(a);
     }
 
     private static class WaveProjectile {
@@ -224,6 +240,108 @@ public class ProjectileManager extends BaseAppState {
             mesh.setBuffer(VertexBuffer.Type.Index, 3, indices);
             mesh.updateBound();
             return mesh;
+        }
+    }
+
+    private static class Arrow {
+        Node geo;
+        Vector3f pos;
+        Vector3f vel;
+        float damage;
+        boolean done = false;
+        boolean stuck = false;
+        float stuckTimer = 0f;
+
+        Arrow(SimpleApplication app, Vector3f origin, Vector3f velocity, float dmg) {
+            this.pos = origin.clone();
+            this.vel = velocity.clone();
+            this.damage = dmg;
+            // Visual simples: haste com ponta e penas
+            Node node = new Node("arrow");
+            Geometry shaft = new Geometry("shaft", new Box(0.01f, 0.01f, 0.35f));
+            Material m = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+            m.setColor("Color", new ColorRGBA(0.85f, 0.8f, 0.7f, 1f));
+            shaft.setMaterial(m);
+            shaft.setLocalTranslation(0f, 0f, 0f);
+            node.attachChild(shaft);
+            Geometry head = new Geometry("head", new Box(0.015f, 0.015f, 0.05f));
+            Material mh = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+            mh.setColor("Color", new ColorRGBA(0.9f, 0.9f, 0.95f, 1f));
+            head.setMaterial(mh);
+            head.setLocalTranslation(0f, 0f, 0.42f);
+            node.attachChild(head);
+            Geometry fletch = new Geometry("fletch", new Box(0.03f, 0.01f, 0.05f));
+            Material mf = new Material(app.getAssetManager(), "Common/MatDefs/Misc/Unshaded.j3md");
+            mf.setColor("Color", new ColorRGBA(0.9f, 0.2f, 0.2f, 1f));
+            fletch.setMaterial(mf);
+            fletch.setLocalTranslation(0f, 0f, -0.35f);
+            node.attachChild(fletch);
+
+            geo = node;
+            geo.setLocalTranslation(pos);
+            alignToVelocity();
+        }
+
+        boolean update(float tpf, ChunkManager cm, MobManager mm) {
+            if (done) return true;
+            if (stuck) {
+                stuckTimer -= tpf;
+                return stuckTimer <= 0f;
+            }
+            // física simples
+            vel.y -= 24f * tpf; // gravidade
+            vel.multLocal(1f - 0.02f * tpf); // arrasto leve
+
+            Vector3f from = pos.clone();
+            Vector3f step = vel.mult(tpf);
+            Vector3f to = pos.add(step);
+
+            // colisão com mobs
+            if (mm != null) {
+                int hits = mm.applySwordSweep(from, to, 0.15f, damage, step.normalize());
+                if (hits > 0) {
+                    done = true;
+                    return true;
+                }
+            }
+
+            // colisão com mundo por amostragem
+            float segLen = to.subtract(from).length();
+            int samples = Math.max(1, (int) FastMath.ceil(segLen / 0.1f));
+            Vector3f p = from.clone();
+            Vector3f inc = to.subtract(from).divide(samples);
+            for (int i = 0; i < samples; i++) {
+                p = p.add(inc);
+                int wx = (int) FastMath.floor(p.x);
+                int wy = (int) FastMath.floor(p.y);
+                int wz = (int) FastMath.floor(p.z);
+                if (cm.isBlockingAtWorld(wx, wy, wz)) {
+                    // grudar na superfície e ficar por alguns segundos
+                    pos.set(p);
+                    geo.setLocalTranslation(pos);
+                    alignToVelocity();
+                    stuck = true;
+                    stuckTimer = 6.0f;
+                    return false;
+                }
+            }
+
+            // atualiza pose
+            pos.set(to);
+            geo.setLocalTranslation(pos);
+            alignToVelocity();
+            return false;
+        }
+
+        void alignToVelocity() {
+            Vector3f dir = vel.normalize();
+            Quaternion q = new Quaternion();
+            q.lookAt(dir, Vector3f.UNIT_Y);
+            geo.setLocalRotation(q);
+        }
+
+        void detach() {
+            if (geo != null) geo.removeFromParent();
         }
     }
 }

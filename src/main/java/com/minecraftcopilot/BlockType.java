@@ -30,6 +30,16 @@ public enum BlockType {
     DUMMY(10, new ColorRGBA(0.55f, 0.43f, 0.30f, 1f), 13, 13, 13) {
         @Override public boolean isSolid() { return false; }
         @Override public boolean isBlocking() { return false; }
+    },
+    // Arco (item): não sólido/bloqueante; possui modelo na mão
+    BOW(11, new ColorRGBA(1f, 1f, 1f, 1f), 14, 14, 14) {
+        @Override public boolean isSolid() { return false; }
+        @Override public boolean isBlocking() { return false; }
+    },
+    // Flecha (item): não sólido/bloqueante; usado como munição (por ora infinito)
+    ARROW(12, new ColorRGBA(1f, 1f, 1f, 1f), 15, 15, 15) {
+        @Override public boolean isSolid() { return false; }
+        @Override public boolean isBlocking() { return false; }
     };
 
     public final byte id;
