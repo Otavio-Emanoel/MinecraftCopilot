@@ -75,6 +75,8 @@ Alguns drivers podem ter instabilidades com LWJGL3/OpenGL3. Neste projeto já de
 
 Se desejar voltar ao LWJGL3 (mais recente), troque para `jme3-lwjgl3` na `build.gradle` e remova/ajuste a linha do renderer para `AppSettings.LWJGL_OPENGL3`. Se o crash voltar, mantenha LWJGL2.
 
+Para windows, baixe as dependencias nos sites oficiais.
+
 ## Licença
 
 Uso livre para fins educacionais. Não é afiliado à Mojang/Microsoft.
